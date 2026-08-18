@@ -1,0 +1,27 @@
+# Environment variables (Critical)
+.env
+.env.*
+!.env.example
+
+# Python virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache & generated files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Scraped Data / Local Outputs
+data/
+*.json
+*.csv
+*.sqlite3
+
+# IDE & System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
