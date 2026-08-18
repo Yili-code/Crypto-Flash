@@ -52,7 +52,7 @@ DEFAULT_KEYWORDS = [
     "MicroStrategy", "币安", "Binance", "Coinbase", "Tether", "Circle",
     
     # --- 關鍵人物、機構與風險資產 ---
-    "特朗普", "Trump", , "G7", "G20",
+    "特朗普", "Trump", "G7", "G20",
     "巴菲特", "马斯克", "Musk",
     "纳斯达克", "Nasdaq", "标普", "SP500", "英伟达", "NVDA"
 ]
