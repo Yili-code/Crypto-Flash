@@ -245,14 +245,15 @@ Analyze the provided news flash ({text}) and present your briefing in Traditiona
 # Output Structure:
 <b>(New title)</b>
 
-<b>News Summary</b> (簡單用一句話總結新聞)
+<b>(簡單用一句話總結新聞)</b> 
 
 <b>總體經濟 / 世界發展影響</b>
-(Analysis content)
+(Analysis content, a brief explanation is fine)
 
 <b>Crypto 短期走勢與長期趨勢</b>
-Short-term | (Analysis content)
-Long-term | (Analysis content)
+# Short-term | (Analysis content, a brief explanation is fine)
+
+# Long-term | (Analysis content, a brief explanation is fine)
 
 <b>科技影響</b>
 (Include this section ONLY IF the news explicitly involves Technology, AI, or Infrastructure; otherwise, omit this entire header and content completely)
