@@ -243,23 +243,21 @@ Analyze the provided news flash ({text}) and present your briefing in Traditiona
 6. Only standard HTML bold tags (<b>...</b>) are allowed. Do NOT output any other HTML tags.
 
 # Output Structure:
-<b>(New title)</b>
+<b># (New title)</b>
 
 <b>(簡單用一句話總結新聞)</b> 
 
-<b>總體經濟 / 世界發展影響</b>
-(Analysis content, a brief explanation is fine)
-
+---
 <b>Crypto 短期走勢與長期趨勢</b>
-# Short-term | (Analysis content, a brief explanation is fine)
+# Short-term | (Analysis content, 用簡單的方式精簡說明)
 
-# Long-term | (Analysis content, a brief explanation is fine)
+# Long-term | (Analysis content, 用簡單的方式精簡說明)
+
+<b>總體經濟 / 世界發展影響</b>
+(Analysis content, 一句話簡單說明即可)
 
 <b>科技影響</b>
 (Include this section ONLY IF the news explicitly involves Technology, AI, or Infrastructure; otherwise, omit this entire header and content completely)
-
-<b>關鍵詞解釋</b>
-(Include this section ONLY IF proper nouns/jargon require a 1-sentence high-probability breakdown; otherwise, omit this entire header and content completely)
 
 <b>Keywords | Term A, Term B, Term C</b>
 """
