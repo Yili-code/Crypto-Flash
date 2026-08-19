@@ -234,18 +234,21 @@ Analyze the provided news flash ({text}) and present your briefing in Traditiona
 # Output Structure:
 <b>(New title)</b>
 
-<b>簡單總結</b> (簡單用一句話總結新聞)
+<i>$</i> | (簡單用一句話總結新聞)
 
-<b>Crypto 短期走勢與長期趨勢</b>
+<b>Crypto</b>
 <i>S<i/> | (Analysis content, 用簡單的方式精簡說明)
 
 <i>L<i/> | (Analysis content, 用簡單的方式精簡說明)
 
-<b>總體經濟 / 世界發展影響</b>
-(除非影響極大不然省略，一句話簡單說明即可)
+<b>總體經濟影響</b>
+(除非影響極大不然省略，一句話簡單說明此新聞對總體經濟發展的影響)
+
+<b>世界發展影響</b>
+(除非影響極大不然省略，一句話簡單說明此新聞對世界局勢發展的影響)
 
 <b>科技影響</b>
-(除非影響極大不然省略，一句話簡單說明即可)
+(除非影響極大不然省略，一句話簡單說明此新聞對科技發展的影響)
 
 <b>Keywords</b> | <code>Term A</code>, <code>Term B</code>, <code>Term C</code>
 """
@@ -315,8 +318,8 @@ def format_message(title: str, content: str, summary: str) -> str:
     parts = [""]
     if summary:
         parts.append(f"{(summary)}")
-    if content:
-        parts.append(f"\n<b>Source</b>\n{escape(content)}")
+    ## if content:
+        ## parts.append(f"\n<b>Source</b>\n{escape(content)}")
     return "\n".join(parts)
 
 
