@@ -275,10 +275,8 @@ Output structure for the "message" field (use \\n for line breaks):
 
 (簡單用一句話總結新聞)
 
-<b>Crypto</b>
-<i>S</i>  (短線 Analysis，用簡單的方式精簡說明)
-
-<i>L</i>  (長線 Analysis，用簡單的方式精簡說明)
+<b>Crypto (Short-term)</b>
+(短線 Analysis，用簡單的方式精簡說明)
 
 <b>總體經濟影響</b>
 (除非影響極大則用「一句話簡單說明」不然全部省略)
