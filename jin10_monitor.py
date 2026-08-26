@@ -273,9 +273,9 @@ Write "message" as an HTML-formatted briefing in Traditional Chinese following t
 Output structure for the "message" field (use \\n for line breaks):
 <b>(News title)</b>
 
-(簡單用一句話總結新聞)
+(簡單用一句話總結新聞，需去 AI 化)
 
-<b>Crypto (Short-term)</b>
+<b>Crypto</b>
 (短線 Analysis，用簡單的方式精簡說明)
 
 <b>總體經濟影響</b>
