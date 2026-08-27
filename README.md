@@ -25,7 +25,7 @@ Github Action 24/7 自動化運行，可在群組與私訊正常運作
 </td>
 <td align="center" width="33%">
 <img src="assets/demo002.jpg" width="100%"><br>
-<sub><b>直接問它</b><br>AI 會參考發送過的新聞並結合自身推理能力回答</sub>
+<sub><b>AI 即時回覆</b><br>發送過的新聞 x 自身推理能力</sub>
 </td>
 </tr>
 </table>
