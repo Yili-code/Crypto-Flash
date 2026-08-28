@@ -14,6 +14,8 @@ Github Action 24/7 自動化運行，可在群組與私訊正常運作
 [![Telegram](https://img.shields.io/badge/推播-Telegram-26A5E4?logo=telegram&logoColor=white)](.)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
+**[English](README.en.md) | 繁體中文**
+
 </div>
 
 <div align="center">
