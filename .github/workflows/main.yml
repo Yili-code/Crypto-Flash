@@ -12,7 +12,7 @@ concurrency:
 jobs:
   run-monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 360
 
     steps:
       - name: Checkout repository
