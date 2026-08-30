@@ -1,4 +1,4 @@
-name: Jin10 快訊監聽 Agent
+name: Jin10 flash monitor Agent
 
 on:
   schedule:
@@ -40,4 +40,4 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          python jin10_monitor.py
+          python src/jin10_monitor.py

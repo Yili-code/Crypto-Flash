@@ -1,43 +1,36 @@
 import asyncio
 import json
-import logging
 import os
 import random
 import re
 import struct
 import time
 from collections import deque
-from html import escape, unescape
+from html import unescape
 from typing import Optional
 
 import aiohttp
 import websockets
-from dotenv import load_dotenv
 
-load_dotenv(override=True)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
-log = logging.getLogger("jin10")
+from common import (
+    CONTEXT_MAX_AGE_SEC,
+    CONTEXT_MAX_ITEMS,
+    GEMINI_API_KEY,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
+    TIER_LEVELS,
+    TIER_RANK,
+    MAX_TIER_TO_SEND,
+    call_gemini,
+    get_logger,
+    save_recent_news,
+    send_telegram_message,
+    test_gemini_connection,
+)
 
-# ─── 配置 ───────────────────────────────────────────────────────────────────
+log = get_logger("jin10")
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
-
-TIER_LEVELS = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
-TIER_RANK = {level: rank for rank, level in enumerate(TIER_LEVELS, start=1)}
-
-def _resolve_max_tier(raw: str) -> int:
-    raw = raw.strip().upper()
-    if raw in TIER_RANK:
-        return TIER_RANK[raw]
-    try:
-        return int(raw)
-    except ValueError:
-        return TIER_RANK["MEDIUM"]
-
-MAX_TIER_TO_SEND = _resolve_max_tier(os.getenv("MAX_TIER_TO_SEND", "MEDIUM"))
+# ─── WebSocket / 關鍵詞設定 ──────────────────────────────────────────────────
 
 WS_URLS = [url.strip() for url in os.getenv("WS_URLS", "wss://wss-flash-2.jin10.com/").split(",") if url.strip()]
 WS_RECONNECT_DELAY = float(os.getenv("WS_RECONNECT_DELAY", "5"))
@@ -93,6 +86,7 @@ def load_keywords(env_name: str, fallback: list[str]) -> list[str]:
     keywords = [line for line in lines if line and not line.startswith("#")]
     return keywords or list(fallback)
 
+
 KEYWORDS = load_keywords("KEYWORDS_FILE", DEFAULT_KEYWORDS)
 
 # ─── jin10 快訊文字解析 ──────────────────────────────────────────────────────
@@ -113,7 +107,6 @@ def clean_number(value: object) -> str:
     return "" if text.lower() in {"", "none", "null"} else text
 
 def indicator_item_text(item: dict) -> tuple[str, str]:
-
     if item.get("type") != 1:
         return "", ""
     data = item_data(item)
@@ -216,16 +209,20 @@ def get_ws_headers() -> dict:
         "User-Agent": random.choice(UA_POOL),
     }
 
-def get_ws_connect_kwargs() -> dict:
-    """兼容 websockets 12/13 的 extra_headers 和 14+ 的 additional_headers。"""
-    kwargs = {"origin": "https://www.jin10.com", "ping_interval": None, "open_timeout": 10}
+def _detect_ws_header_kw() -> str:
+    """兼容 websockets 12/13 的 extra_headers 和 14+ 的 additional_headers。只在 import 時判斷一次。"""
     try:
         import inspect
         params = inspect.signature(websockets.connect).parameters
     except (TypeError, ValueError):
         params = {}
-    header_arg = "additional_headers" if "additional_headers" in params else "extra_headers"
-    kwargs[header_arg] = get_ws_headers()
+    return "additional_headers" if "additional_headers" in params else "extra_headers"
+
+_WS_HEADER_KW = _detect_ws_header_kw()
+
+def get_ws_connect_kwargs() -> dict:
+    kwargs = {"origin": "https://www.jin10.com", "ping_interval": None, "open_timeout": 10}
+    kwargs[_WS_HEADER_KW] = get_ws_headers()
     return kwargs
 
 
@@ -244,9 +241,8 @@ def is_new(item: dict) -> bool:
     return True
 
 
-# ─── Gemini 摘要 ────────────────────────────────────────────────────────────
+# ─── Gemini 分級與摘要 ──────────────────────────────────────────────────────
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_PROMPT = """You are Jarvis, an elite AI advisor to Sir, specializing in cryptocurrency market intelligence. Your objective is to (1) grade how much this news flash is likely to move the crypto market, and (2) if it's worth surfacing, produce a dense, refined briefing.
 
 Analyze the provided news flash below and respond according to the rules.
@@ -291,132 +287,59 @@ Respond with ONLY a raw JSON object (no markdown fences, no commentary) matching
 {{"tier": <"CRITICAL"|"HIGH"|"MEDIUM"|"LOW">, "relevant": <true|false>, "message": "<the HTML briefing string, or a short reason if not relevant>"}}
 """
 
+GEMINI_RESPONSE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "tier": {"type": "STRING", "enum": TIER_LEVELS},
+        "relevant": {"type": "BOOLEAN"},
+        "message": {"type": "STRING"},
+    },
+    "required": ["tier", "relevant", "message"],
+}
+
 async def summarize_with_gemini(session: aiohttp.ClientSession, text: str) -> Optional[dict]:
-    """呼叫 Gemini 取得分級與摘要。回傳 {"tier": int, "relevant": bool, "message": str}，失敗回傳 None。"""
-    if not GEMINI_API_KEY:
+    """呼叫 Gemini 取得分級與摘要。回傳 {"tier": str|None, "relevant": bool, "message": str}，失敗回傳 None。"""
+    raw_text = await call_gemini(session, GEMINI_PROMPT.format(text=text), response_schema=GEMINI_RESPONSE_SCHEMA)
+    if not raw_text:
         return None
-    url = GEMINI_URL.format(model=GEMINI_MODEL)
-
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY
-    }
-
-    payload = {
-        "contents": [{"parts": [{"text": GEMINI_PROMPT.format(text=text)}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": {
-                "type": "OBJECT",
-                "properties": {
-                    "tier": {"type": "STRING", "enum": TIER_LEVELS},
-                    "relevant": {"type": "BOOLEAN"},
-                    "message": {"type": "STRING"},
-                },
-                "required": ["tier", "relevant", "message"],
-            },
-        },
-    }
-
     try:
-        async with session.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status != 200:
-                body = await resp.text()
-                log.warning("Gemini 呼叫失敗：status=%s body=%s", resp.status, body[:300])
-                return None
-            data = await resp.json()
-            candidates = data.get("candidates") or []
-            if not candidates:
-                return None
-            parts = candidates[0].get("content", {}).get("parts", [])
-            raw_text = "".join(p.get("text", "") for p in parts).strip()
-            if not raw_text:
-                return None
-            try:
-                result = json.loads(raw_text)
-            except json.JSONDecodeError:
-                log.warning("Gemini 回傳非合法 JSON：%s", raw_text[:300])
-                return None
-            tier = str(result.get("tier") or "").strip().upper()
-            if tier not in TIER_RANK:
-                tier = None
-            return {
-                "tier": tier,
-                "relevant": bool(result.get("relevant", True)),
-                "message": str(result.get("message", "")).strip(),
-            }
-    except Exception as exc:
-        log.warning("Gemini 呼叫異常：%s", exc)
+        result = json.loads(raw_text)
+    except json.JSONDecodeError:
+        log.warning("Gemini 回傳非合法 JSON：%s", raw_text[:300])
         return None
+    tier = str(result.get("tier") or "").strip().upper()
+    if tier not in TIER_RANK:
+        tier = None
+    return {
+        "tier": tier,
+        "relevant": bool(result.get("relevant", True)),
+        "message": str(result.get("message", "")).strip(),
+    }
 
 
 # ─── 近期快訊上下文（供 telegram_qa.py 問答使用） ────────────────────────────
 
-CONTEXT_MAX_ITEMS = int(os.getenv("CONTEXT_MAX_ITEMS", "80"))
-CONTEXT_MAX_AGE_SEC = int(os.getenv("CONTEXT_MAX_AGE_SEC", str(6 * 3600)))  # 預設保留 6 小時
-NEWS_CONTEXT_FILE = os.getenv("NEWS_CONTEXT_FILE", "recent_news.json")
-
 recent_news: deque[dict] = deque(maxlen=CONTEXT_MAX_ITEMS)
-
-def _save_news_context() -> None:
-    try:
-        tmp_path = f"{NEWS_CONTEXT_FILE}.tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(list(recent_news), f, ensure_ascii=False)
-        os.replace(tmp_path, NEWS_CONTEXT_FILE)
-    except OSError as exc:
-        log.warning("寫入近期快訊上下文檔失敗：%s", exc)
 
 def remember_news(title: str, content: str, tier: Optional[str]) -> None:
     now = time.time()
     recent_news.append({"ts": now, "title": title, "content": content, "tier": tier})
     while recent_news and now - recent_news[0]["ts"] > CONTEXT_MAX_AGE_SEC:
         recent_news.popleft()
-    _save_news_context()
+    save_recent_news(list(recent_news))
 
 
-# ─── Telegram 推播 ──────────────────────────────────────────────────────────
+# ─── 訊息組裝 ───────────────────────────────────────────────────────────────
 
-async def send_telegram(session: aiohttp.ClientSession, text: str) -> bool:
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        log.warning("Telegram 未配置，略過發送：\n%s", text)
-        return False
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": text,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True,
-    }
-    for attempt in range(1, 3):
-        try:
-            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 200:
-                    return True
-                body = await resp.text()
-                log.warning("Telegram 發送失敗：status=%s attempt=%s body=%s", resp.status, attempt, body[:300])
-        except Exception as exc:
-            log.warning("Telegram 發送異常：attempt=%s error=%s", attempt, exc)
-        await asyncio.sleep(1.5)
-    return False
+TIER_BADGES = {"CRITICAL", "HIGH", "MEDIUM"}
 
-TIER_BADGES = {"CRITICAL": "CRITICAL", "HIGH": "HIGH", "MEDIUM": "MEDIUM"}
-
-def format_message(title: str, content: str, summary: str, tier: Optional[str] = None) -> str:
+def format_message(summary: str, tier: Optional[str] = None) -> str:
     parts = []
-    badge = TIER_BADGES.get(tier)
-    if badge:
-        parts.append(badge)
+    if tier in TIER_BADGES:
+        parts.append(tier)
     if summary:
-        parts.append(f"{(summary)}")
-    ## if content:
-        ## parts.append(f"\n<b>Source</b>\n{escape(content)}")
-    return "\n".join(parts) if parts else ""
+        parts.append(summary)
+    return "\n".join(parts)
 
 
 # ─── 主流程 ─────────────────────────────────────────────────────────────────
@@ -439,6 +362,7 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
             # Gemini 呼叫失敗，不做分級過濾，直接以原始標題/內容推播（保底行為）
             log.warning("Gemini 分級失敗，略過分級直接推播：%s", (title or content)[:60])
             remember_news(title, content, None)
+            summary = title or content
         else:
             tier = result["tier"]
             remember_news(title, content, tier)
@@ -450,9 +374,10 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
             summary = result["message"]
     else:
         remember_news(title, content, None)
+        summary = title or content
 
-    msg = format_message(title, content, summary, tier=tier)
-    ok = await send_telegram(session, msg)
+    msg = format_message(summary, tier=tier)
+    ok = await send_telegram_message(session, TELEGRAM_CHAT_ID, msg)
     log.info("Telegram 發送%s", "成功" if ok else "失敗")
 
 
@@ -511,30 +436,7 @@ async def ws_loop(session: aiohttp.ClientSession) -> None:
             log.warning("WebSocket 斷線：%s，%ss 後重連", exc, WS_RECONNECT_DELAY)
             await asyncio.sleep(WS_RECONNECT_DELAY)
 
-async def test_gemini_connection(session: aiohttp.ClientSession) -> bool:
-    if not GEMINI_API_KEY:
-        log.warning("未設置 GEMINI_API_KEY")
-        return False
 
-    url = GEMINI_URL.format(model=GEMINI_MODEL)
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY
-    }
-    payload = {"contents": [{"parts": [{"text": "Ping"}]}]}
-
-    try:
-        async with session.post(url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-            if resp.status == 200:
-                log.info("Gemini API Key 驗證成功！連線正常。")
-                return True
-            body = await resp.text()
-            log.error("Gemini API Key 驗證失敗 (Status %s): %s", resp.status, body[:200])
-            return False
-    except Exception as exc:
-        log.error("Gemini 連線測試異常: %s", exc)
-        return False
-    
 async def main() -> None:
     async with aiohttp.ClientSession() as session:
         gemini_ok = await test_gemini_connection(session)

@@ -42,4 +42,4 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           NEWS_CONTEXT_FILE: recent_news.json
-        run: python telegram_qa.py
+        run: python src/telegram_qa.py
