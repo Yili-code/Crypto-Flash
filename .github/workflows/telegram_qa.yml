@@ -2,9 +2,8 @@ name: Telegram QA Bot
 
 on:
   schedule:
-    - cron: "0 */6 * * *"    
+    - cron: "0 */6 * * *"
   workflow_dispatch: {}
-
 
 concurrency:
   group: telegram-qa
@@ -22,14 +21,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install aiohttp python-dotenv
+          fi
 
       - name: Restore recent news context (best-effort)
         uses: actions/cache/restore@v4
         with:
-          path: recent_news.json
+          path: data/recent_news.json
           key: recent-news-${{ github.run_id }}
           restore-keys: |
             recent-news-
@@ -41,5 +47,4 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-          NEWS_CONTEXT_FILE: recent_news.json
         run: python src/telegram_qa.py

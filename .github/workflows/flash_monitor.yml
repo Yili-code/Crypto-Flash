@@ -33,6 +33,14 @@ jobs:
             pip install aiohttp websockets python-dotenv
           fi
 
+      - name: Restore recent news context (best-effort)
+        uses: actions/cache/restore@v4
+        with:
+          path: data/recent_news.json
+          key: recent-news-${{ github.run_id }}
+          restore-keys: |
+            recent-news-
+
       - name: Run Jin10 Monitor
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -41,3 +49,10 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python src/jin10_monitor.py
+
+      - name: Save recent news context (best-effort)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/recent_news.json
+          key: recent-news-${{ github.run_id }}
