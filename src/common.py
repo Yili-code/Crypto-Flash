@@ -17,7 +17,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
-
 _log = get_logger("common")
 
 # ─── Tier 分級 ──────────────────────────────────────────────────────────────
