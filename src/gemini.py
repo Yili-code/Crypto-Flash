@@ -11,6 +11,12 @@ GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_M
 
 log = get_logger("gemini")
 
+def mask_key(key: str) -> str:
+    if not key:
+        return "(Not set)"
+    if len(key) <= 8:
+        return "*" * len(key)
+    return f"{key[:4]}...{key[-4:]} (length {len(key)})"
 
 async def call_gemini(
     session: aiohttp.ClientSession,
