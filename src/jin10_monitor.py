@@ -21,7 +21,7 @@ from common import (
     get_logger,
     save_recent_news,
 )
-from gemini import GEMINI_API_KEY, call_gemini, test_gemini_connection
+from gemini import GEMINI_API_KEY, call_gemini, test_gemini_connection, mask_key
 from tg01 import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, send_telegram_message
 
 log = get_logger("jin10")
@@ -260,9 +260,9 @@ Write "message" as an HTML-formatted briefing in Traditional Chinese following t
 2. Primary language: Traditional Chinese (no simplified Chinese at all).
 3. Keep STRICTLY in English without translation: geopolitical and location names (US, Israel, Ukraine, Taiwan, EU), financial institutions and key entities (Fed, OPEC, SEC, BRK, Trump), and tech/crypto/macro terms (Layer 2, Liquidity, FVG, CPI, PCE, Bullish). Do NOT append Chinese translations after English terms.
 4. Do NOT output "中國台灣"; always use "台灣".
-5. Only standard HTML bold tags (<b>...</b>), italic tags (<i>...</i>), and <code>...</code> are allowed inside "message". Do NOT output any other HTML tags, and do NOT use Markdown.
+5. The content of "message" MUST ONLY contain standard HTML bold tags (<b>...</b>), italic tags (<i>...</i>), and code tags (<code...></code>). Do NOT output any other HTML tags, Markdown syntax (e.g., * or #), introductory phrases, concluding remarks, or surrounding text outside the defined structure.
 
-Output structure for the "message" field (use \n for line breaks):
+The "message" field MUST strictly follow this content structure (use \n for line breaks):
 <b>(News title)</b>
 
 (簡單用一句話總結新聞，需去 AI 化)
@@ -434,6 +434,9 @@ async def ws_loop(session: aiohttp.ClientSession) -> None:
 
 
 async def main() -> None:
+    print(f"GEMINI_API_KEY : {mask_key(GEMINI_API_KEY)}")
+    print(f"TELEGRAM_BOT_TOKEN : {mask_key(TELEGRAM_BOT_TOKEN)}")
+    print(f"TELEGRAM_CHAT_ID : {mask_key(TELEGRAM_CHAT_ID)}")
     async with aiohttp.ClientSession() as session:
         gemini_ok = await test_gemini_connection(session)
         if not gemini_ok:
