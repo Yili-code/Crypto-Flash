@@ -15,22 +15,18 @@ import websockets
 from common import (
     CONTEXT_MAX_AGE_SEC,
     CONTEXT_MAX_ITEMS,
-    GEMINI_API_KEY,
-    TELEGRAM_BOT_TOKEN,
-    TELEGRAM_CHAT_ID,
     TIER_LEVELS,
     TIER_RANK,
     MAX_TIER_TO_SEND,
-    call_gemini,
     get_logger,
     save_recent_news,
-    send_telegram_message,
-    test_gemini_connection,
 )
+from gemini import GEMINI_API_KEY, call_gemini, test_gemini_connection
+from tg01 import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, send_telegram_message
 
 log = get_logger("jin10")
 
-# ─── WebSocket / 關鍵詞設定 ──────────────────────────────────────────────────
+# ─── WebSocket / keyword settings ──────────────────────────────────────────────
 
 WS_URLS = [url.strip() for url in os.getenv("WS_URLS", "wss://wss-flash-2.jin10.com/").split(",") if url.strip()]
 WS_RECONNECT_DELAY = float(os.getenv("WS_RECONNECT_DELAY", "5"))
@@ -42,7 +38,7 @@ UA_POOL = [
 ]
 
 DEFAULT_KEYWORDS = [
-    # --- 加密貨幣核心資產與概念 ---
+    # --- Core crypto assets and concepts ---
     "比特币", "Bitcoin", "BTC", "以太坊", "Ethereum", "ETH",
     "加密货币", "加密貨幣", "数字货币", "虚拟货币", "币圈", "crypto", "cryptocurrency",
     "链上", "on-chain", "DeFi", "NFT", "Web3", "山寨币", "altcoin",
@@ -50,38 +46,38 @@ DEFAULT_KEYWORDS = [
     "币安币", "BNB", "Cardano", "ADA", "Polkadot", "Avalanche", "AVAX",
     "Layer2", "L2",
 
-    # --- 交易所與機構生態 ---
+    # --- Exchanges and institutional ecosystem ---
     "币安", "Binance", "Coinbase", "OKX", "Bybit", "Kraken", "Bitfinex",
     "火币", "Huobi", "HTX", "灰度", "Grayscale", "贝莱德", "BlackRock",
     "MicroStrategy", "Strategy", "Circle", "Tether", "USDT", "USDC", "稳定币",
     "stablecoin",
 
-    # --- ETF 與監管 ---
+    # --- ETF and regulation ---
     "现货ETF", "比特币ETF", "以太坊ETF", "SEC", "CFTC", "证监会", "香港证监会",
     "监管", "稳定币法案", "GENIUS Act",
 
-    # --- 市場動態與風險事件 ---
+    # --- Market dynamics and risk events ---
     "爆仓", "清算", "做多", "做空", "杠杆", "减半", "halving",
     "黑客", "被盗", "交易所停摆", "挤兑", "脱锚", "depeg", "崩盘", "暴跌", "暴涨",
 
-    # --- 關鍵人物 ---
+    # --- Key people ---
     "特朗普", "Trump", "马斯克", "Musk", "鲍威尔", "Powell",
     "赵长鹏", "CZ", "Saylor", "Michael Saylor", "Vitalik", "Buterin",
 
-    # --- 宏觀驅動（僅保留會直接牽動加密貨幣波動的核心因子） ---
+    # --- Macro drivers (only the core factors with a direct impact on crypto volatility) ---
     "美联储", "Fed", "FOMC", "CPI", "PCE", "非农", "通胀", "降息", "加息", "利率",
 ]
 
 
 def load_keywords(env_name: str, fallback: list[str]) -> list[str]:
-    """可用 KEYWORDS_FILE=path/to.txt 覆寫，一行一個關鍵詞。"""
+    """Supports KEYWORDS_FILE=path/to.txt to override the built-in keywords, one per line."""
     file_value = os.getenv(env_name, "").strip()
     if not file_value:
         return list(fallback)
     try:
         lines = [line.strip() for line in open(file_value, encoding="utf-8")]
     except OSError as exc:
-        log.warning("%s 讀取失敗，使用內建關鍵詞：%s", file_value, exc)
+        log.warning("Failed to read %s; using built-in keywords instead: %s", file_value, exc)
         return list(fallback)
     keywords = [line for line in lines if line and not line.startswith("#")]
     return keywords or list(fallback)
@@ -89,7 +85,7 @@ def load_keywords(env_name: str, fallback: list[str]) -> list[str]:
 
 KEYWORDS = load_keywords("KEYWORDS_FILE", DEFAULT_KEYWORDS)
 
-# ─── jin10 快訊文字解析 ──────────────────────────────────────────────────────
+# ─── jin10 flash news text parsing ────────────────────────────────────────────
 
 def clean_html(raw: str) -> str:
     text = re.sub(r"<br\s*/?>", "\n", raw, flags=re.I)
@@ -122,13 +118,13 @@ def indicator_item_text(item: dict) -> tuple[str, str]:
     previous = clean_number(data.get("previous"))
     lines = []
     if actual:
-        lines.append(f"公布值：{actual}{unit}")
+        lines.append(f"Actual: {actual}{unit}")
     if consensus:
-        lines.append(f"預期：{consensus}{unit}")
+        lines.append(f"Expected: {consensus}{unit}")
     if previous:
-        lines.append(f"前值：{previous}{unit}")
+        lines.append(f"Previous: {previous}{unit}")
     if data.get("country"):
-        lines.append(f"市場：{clean_html(str(data.get('country')))}")
+        lines.append(f"Market: {clean_html(str(data.get('country')))}")
     return title, "\n".join(lines)
 
 def item_text(item: dict) -> tuple[str, str]:
@@ -152,7 +148,7 @@ def match_keywords(text: str) -> bool:
     return any(k in text for k in KEYWORDS)
 
 
-# ─── WebSocket 二進位協議 ────────────────────────────────────────────────────
+# ─── WebSocket binary protocol ────────────────────────────────────────────────
 
 def pack_str(value: str) -> bytes:
     raw = value.encode("utf-8")
@@ -176,10 +172,10 @@ def xor_payload(payload: bytes, key: str) -> bytes:
 def build_ws_login(key: str, last_id: Optional[str] = None) -> bytes:
     payload = b"".join([
         struct.pack("<h", 4002),
-        struct.pack("<i", 0),        # 未登陸用戶 ID
+        struct.pack("<i", 0),        # unsigned user ID (not logged in)
         pack_str(""),
         pack_str("chrome"),
-        struct.pack("<i", 0),        # T3 用戶
+        struct.pack("<i", 0),        # T3 user
         pack_str("web"),
         pack_str(last_id or ""),
     ])
@@ -210,7 +206,7 @@ def get_ws_headers() -> dict:
     }
 
 def _detect_ws_header_kw() -> str:
-    """兼容 websockets 12/13 的 extra_headers 和 14+ 的 additional_headers。只在 import 時判斷一次。"""
+    """Compat with websockets 12/13 using extra_headers and 14+ using additional_headers. Detected once at import time."""
     try:
         import inspect
         params = inspect.signature(websockets.connect).parameters
@@ -226,7 +222,7 @@ def get_ws_connect_kwargs() -> dict:
     return kwargs
 
 
-# ─── 去重 ───────────────────────────────────────────────────────────────────
+# ─── Deduplication ─────────────────────────────────────────────────────────────
 
 seen_ids: dict[str, None] = {}
 
@@ -241,9 +237,9 @@ def is_new(item: dict) -> bool:
     return True
 
 
-# ─── Gemini 分級與摘要 ──────────────────────────────────────────────────────
+# ─── Gemini tiering and summarization ──────────────────────────────────────────
 
-GEMINI_PROMPT = """You are Jarvis, an elite AI advisor to Sir, specializing in cryptocurrency market intelligence. Your objective is to (1) grade how much this news flash is likely to move the crypto market, and (2) if it's worth surfacing, produce a dense, refined briefing.
+GEMINI_PROMPT = """You are Jarvis, an elite AI advisor to Sir, specializing in cryptocurrency market intelligence. Your objective is to (1) grade how much this news flash is likely to move the crypto market, and (2) if it is worth surfacing, produce a dense, refined briefing.
 
 Analyze the provided news flash below and respond according to the rules.
 
@@ -256,17 +252,17 @@ Analyze the provided news flash below and respond according to the rules.
 - MEDIUM (中): 與crypto有一定關聯但影響有限。例如：單一項目或協議更新、中小型交易所動態、非主流代幣價格波動、行業報告。
 - LOW (低/幾乎不相關): 幾乎與加密貨幣市場無實質關聯的新聞（即使字面上出現了關鍵詞）。
 
-Set "relevant" to false ONLY if the news has no meaningful connection to the crypto market at all (tier should then also be LOW).
+Set "relevant" to false ONLY if the news has no meaningful connection to the crypto market at all (the tier should then also be LOW).
 
-# Step 2 — Briefing (only meaningful if tier is CRITICAL, HIGH, or MEDIUM; otherwise you may leave "message" short):
+# Step 2 — Briefing (only meaningful if the tier is CRITICAL, HIGH, or MEDIUM; otherwise, you may leave "message" short):
 Write "message" as an HTML-formatted briefing in Traditional Chinese following these rules:
-1. Persona: Professional, sharp, elegant, and understatedly loyal. Zero Fluff — no greetings or filler.
-2. Primary Language: Traditional Chinese (絕對不能出現簡體中文).
-3. Keep STRICTLY in English without translation: geopolitical/location names (US, Israel, Ukraine, Taiwan, EU), financial institutions & key entities (Fed, OPEC, SEC, BRK, Trump), tech/crypto/macro terms (Layer 2, Liquidity, FVG, CPI, PCE, Bullish). Do NOT append Chinese translations after English terms.
-4. Do NOT output「中國台灣」, always use「台灣」.
-5. Only standard HTML bold tags (<b>...</b>) and italic tags (<i>...</i>) and <code>...</code> are allowed inside "message". Do NOT output any other HTML tags, and do NOT use Markdown.
+1. Persona: professional, sharp, elegant, and understatedly loyal. Zero fluff — no greetings or filler.
+2. Primary language: Traditional Chinese (no simplified Chinese at all).
+3. Keep STRICTLY in English without translation: geopolitical and location names (US, Israel, Ukraine, Taiwan, EU), financial institutions and key entities (Fed, OPEC, SEC, BRK, Trump), and tech/crypto/macro terms (Layer 2, Liquidity, FVG, CPI, PCE, Bullish). Do NOT append Chinese translations after English terms.
+4. Do NOT output "中國台灣"; always use "台灣".
+5. Only standard HTML bold tags (<b>...</b>), italic tags (<i>...</i>), and <code>...</code> are allowed inside "message". Do NOT output any other HTML tags, and do NOT use Markdown.
 
-Output structure for the "message" field (use \\n for line breaks):
+Output structure for the "message" field (use \n for line breaks):
 <b>(News title)</b>
 
 (簡單用一句話總結新聞，需去 AI 化)
@@ -298,14 +294,14 @@ GEMINI_RESPONSE_SCHEMA = {
 }
 
 async def summarize_with_gemini(session: aiohttp.ClientSession, text: str) -> Optional[dict]:
-    """呼叫 Gemini 取得分級與摘要。回傳 {"tier": str|None, "relevant": bool, "message": str}，失敗回傳 None。"""
+    """Call Gemini to get tiering and summary. Returns {"tier": str|None, "relevant": bool, "message": str}; returns None on failure."""
     raw_text = await call_gemini(session, GEMINI_PROMPT.format(text=text), response_schema=GEMINI_RESPONSE_SCHEMA)
     if not raw_text:
         return None
     try:
         result = json.loads(raw_text)
     except json.JSONDecodeError:
-        log.warning("Gemini 回傳非合法 JSON：%s", raw_text[:300])
+        log.warning("Gemini returned invalid JSON: %s", raw_text[:300])
         return None
     tier = str(result.get("tier") or "").strip().upper()
     if tier not in TIER_RANK:
@@ -317,7 +313,7 @@ async def summarize_with_gemini(session: aiohttp.ClientSession, text: str) -> Op
     }
 
 
-# ─── 近期快訊上下文（供 telegram_qa.py 問答使用） ────────────────────────────
+# ─── Recent flash context (for telegram_qa.py Q&A) ───────────────────────────
 
 recent_news: deque[dict] = deque(maxlen=CONTEXT_MAX_ITEMS)
 
@@ -329,7 +325,7 @@ def remember_news(title: str, content: str, tier: Optional[str]) -> None:
     save_recent_news(list(recent_news))
 
 
-# ─── 訊息組裝 ───────────────────────────────────────────────────────────────
+# ─── Message assembly ──────────────────────────────────────────────────────────
 
 TIER_BADGES = {"CRITICAL", "HIGH", "MEDIUM"}
 
@@ -342,7 +338,7 @@ def format_message(summary: str, tier: Optional[str] = None) -> str:
     return "\n".join(parts)
 
 
-# ─── 主流程 ─────────────────────────────────────────────────────────────────
+# ─── Main flow ────────────────────────────────────────────────────────────────
 
 async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
     title, content = item_text(item)
@@ -352,15 +348,15 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
     if not match_keywords(full_text):
         return
 
-    log.info("命中關鍵詞：%s", (title or content)[:60])
+    log.info("Keyword match: %s", (title or content)[:60])
 
     tier: Optional[str] = None
     summary = ""
     if GEMINI_API_KEY:
         result = await summarize_with_gemini(session, full_text)
         if result is None:
-            # Gemini 呼叫失敗，不做分級過濾，直接以原始標題/內容推播（保底行為）
-            log.warning("Gemini 分級失敗，略過分級直接推播：%s", (title or content)[:60])
+            # Gemini failed; skip tier filtering and send the original title/content as a fallback
+            log.warning("Gemini tiering failed; broadcasting original content directly: %s", (title or content)[:60])
             remember_news(title, content, None)
             summary = title or content
         else:
@@ -368,7 +364,7 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
             remember_news(title, content, tier)
             tier_rank = TIER_RANK.get(tier)
             if not result["relevant"] or (tier_rank is not None and tier_rank > MAX_TIER_TO_SEND):
-                log.info("Gemini 判定 tier=%s relevant=%s，略過推送：%s",
+                log.info("Gemini decided tier=%s relevant=%s; skipping push: %s",
                           tier, result["relevant"], (title or content)[:60])
                 return
             summary = result["message"]
@@ -378,16 +374,16 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
 
     msg = format_message(summary, tier=tier)
     ok = await send_telegram_message(session, TELEGRAM_CHAT_ID, msg)
-    log.info("Telegram 發送%s", "成功" if ok else "失敗")
+    log.info("Telegram send %s", "successful" if ok else "failed")
 
 
 async def ws_loop(session: aiohttp.ClientSession) -> None:
-    log.info("嘗試建立 WebSocket 連接 …")
+    log.info("Attempting to establish WebSocket connection...")
     while True:
         ws_url = random.choice(WS_URLS)
         try:
             async with websockets.connect(ws_url, **get_ws_connect_kwargs()) as ws:
-                log.info("WebSocket 已連接：%s", ws_url)
+                log.info("WebSocket connected: %s", ws_url)
                 secret = ""
                 skipped_initial_list = False
                 while True:
@@ -402,12 +398,12 @@ async def ws_loop(session: aiohttp.ClientSession) -> None:
                             _, seed_b, seed_a = struct.unpack_from("<III", packet, 0)
                             secret = f"{seed_a}.{seed_b}"
                             await ws.send(build_ws_login(secret))
-                            log.info("WebSocket 登入包已發送")
+                            log.info("WebSocket login packet sent")
                             continue
                         packet = xor_payload(bytes(raw), secret)
                         code, data = parse_ws_packet(packet)
                     except Exception as exc:
-                        log.debug("WebSocket 訊息解析失敗：%s", exc)
+                        log.debug("WebSocket message parsing failed: %s", exc)
                         continue
 
                     if code == 1201:
@@ -418,22 +414,22 @@ async def ws_loop(session: aiohttp.ClientSession) -> None:
                         if data.get("action") in {1, 2} and is_new(data):
                             await handle_item(session, data)
                     elif code == 1200 and isinstance(data, list):
-                        # 剛連線時會收到一批歷史快訊，僅用來預熱去重，不逐條處理避免洗版
+                        # When the connection opens, a batch of historical flash news is sent; it is only used to warm the deduplication cache, not processed individually to avoid duplicate spam
                         if not skipped_initial_list:
                             for entry in data:
                                 if isinstance(entry, dict):
                                     is_new(entry)
                             skipped_initial_list = True
-                            log.info("初始歷史列表已預熱去重：%d 條", len(data))
+                            log.info("Initial historical list warmed for deduplication: %d entries", len(data))
                             continue
                         for entry in data:
                             if isinstance(entry, dict) and entry.get("action") in {1, 2} and is_new(entry):
                                 await handle_item(session, entry)
         except asyncio.TimeoutError:
-            log.warning("WebSocket %.0fs 未收到訊息，主動重連", WS_IDLE_TIMEOUT)
+            log.warning("WebSocket received no messages for %.0fs; reconnecting", WS_IDLE_TIMEOUT)
             await asyncio.sleep(WS_RECONNECT_DELAY)
         except Exception as exc:
-            log.warning("WebSocket 斷線：%s，%ss 後重連", exc, WS_RECONNECT_DELAY)
+            log.warning("WebSocket disconnected: %s; reconnecting in %ss", exc, WS_RECONNECT_DELAY)
             await asyncio.sleep(WS_RECONNECT_DELAY)
 
 
@@ -441,10 +437,10 @@ async def main() -> None:
     async with aiohttp.ClientSession() as session:
         gemini_ok = await test_gemini_connection(session)
         if not gemini_ok:
-            log.warning("Gemini 驗證未通過，後續快訊將跳過摘要步驟。")
+            log.warning("Gemini validation failed; subsequent flash updates will skip the summary step.")
 
         if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-            log.warning("未設置 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID，Telegram 推播會被跳過")
+            log.warning("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID are not set; Telegram push notifications will be skipped")
 
         await ws_loop(session)
 
@@ -452,4 +448,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        log.info("已手動停止")
+        log.info("Stopped manually")
