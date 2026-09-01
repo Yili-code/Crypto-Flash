@@ -239,49 +239,45 @@ def is_new(item: dict) -> bool:
 
 # ─── Gemini tiering and summarization ──────────────────────────────────────────
 
-GEMINI_PROMPT = """You are Jarvis, an elite AI advisor to Sir, specializing in cryptocurrency market intelligence. Your objective is to (1) grade how much this news flash is likely to move the crypto market, and (2) if it is worth surfacing, produce a dense, refined briefing.
+GEMINI_PROMPT = """You are Jarvis, an elite AI advisor specializing in cryptocurrency market intelligence. Your objective is to (1) grade how much the news flash will move the crypto market, and (2) if relevant, produce a dense, refined briefing.
 
 Analyze the provided news flash below and respond according to the rules.
 
 # News flash:
 {text}
 
-# Step 1 — Tier Classification (crypto market impact):
-- CRITICAL (最高): 直接且立即決定 BTC/ETH 等主流幣種短時間內大幅波動的重大事件。例如：Fed利率決議、比特幣/以太坊現貨ETF獲批或遭拒、SEC對主要交易所或機構的重大監管行動、大型交易所/機構爆雷或破產、重大駭客攻擊、貝萊德等巨頭大額增減持、穩定幣脫錨。
-- HIGH (高): 對加密貨幣市場有明顯但非決定性影響。例如：CPI/非農等宏觀數據、Fed官員鷹鴿表態、大型機構ETF資金流向、大額鏈上轉帳或巨鯨動向、主要國家監管政策變化、Trump/Musk等關鍵人物涉及crypto的言論。
-- MEDIUM (中): 與crypto有一定關聯但影響有限。例如：單一項目或協議更新、中小型交易所動態、非主流代幣價格波動、行業報告。
-- LOW (低/幾乎不相關): 幾乎與加密貨幣市場無實質關聯的新聞（即使字面上出現了關鍵詞）。
+# Step 1 — Tier Classification:
+- CRITICAL: Direct and immediate impact causing massive short-term volatility in BTC/ETH/Major caps. (e.g., Fed rate decisions, Spot ETF approvals/denials, SEC major regulatory enforcement, tier-1 exchange/institution insolvency, major hack, massive institutional buy/sell, stablecoin de-peg).
+- HIGH: Significant but non-decisive impact. (e.g., CPI/NFP macro data, Fed official hawkish/doveish remarks, ETF net flows, whale transfers, national regulatory policy shifts, key figure crypto statements like Trump/Musk).
+- MEDIUM: Limited or indirect impact. (e.g., Single protocol update, mid/small exchange news, altcoin price moves, industry reports).
+- LOW: Irrelevant or negligible connection to crypto.
 
-Set "relevant" to false ONLY if the news has no meaningful connection to the crypto market at all (the tier should then also be LOW).
+Set "relevant" to false ONLY if the news has zero connection to crypto (tier MUST be LOW).
 
-# Step 2 — Briefing (only meaningful if the tier is CRITICAL, HIGH, or MEDIUM; otherwise, you may leave "message" short):
-Write "message" as an HTML-formatted briefing in Traditional Chinese following these rules:
-1. Persona: professional, sharp, elegant, and understatedly loyal. Zero fluff — no greetings or filler.
-2. Primary language: Traditional Chinese (no simplified Chinese at all).
-3. Keep STRICTLY in English without translation: geopolitical and location names (US, Israel, Ukraine, Taiwan, EU), financial institutions and key entities (Fed, OPEC, SEC, BRK, Trump), and tech/crypto/macro terms (Layer 2, Liquidity, FVG, CPI, PCE, Bullish). Do NOT append Chinese translations after English terms.
-4. Do NOT output "中國台灣"; always use "台灣".
-5. The content of "message" MUST ONLY contain standard HTML bold tags (<b>...</b>), italic tags (<i>...</i>), and code tags (<code...></code>). Do NOT output any other HTML tags, Markdown syntax (e.g., * or #), introductory phrases, concluding remarks, or surrounding text outside the defined structure.
+# Step 2 — Briefing Format Rules:
+Write "message" as an HTML-formatted briefing string strictly adhering to:
+1. Persona: Professional, sharp, elegant, understated loyalty. Zero fluff, zero greetings.
+2. Language: Traditional Chinese ONLY (Strictly NO Simplified Chinese).
+3. Strictly keep ENGLISH without Chinese translation for:
+   - Geopolitical & location names (US, Israel, Ukraine, Taiwan, EU, Eurozone)
+   - Institutions & key entities (Fed, OPEC, SEC, BRK, Trump, Musk, ECB)
+   - Tech/Crypto/Macro terms (Layer 2, Liquidity, FVG, CPI, PCE, Bullish, Bearish, Inflation, Geopolitical Risk)
+   - DO NOT append Chinese in parentheses after any English term.
+4. Always use "台灣", NEVER "中國台灣".
+5. Allowed HTML tags ONLY: <b>...</b>, <i>...</i>, and <code...></code>. 
+   - DO NOT use <br>, <p>, <div>, or Markdown (*, #).
+   - Use plain JSON escaped newline characters "\n" for line breaks inside the string.
 
-The "message" field MUST strictly follow this content structure (use \n for line breaks):
-<b>(News title)</b>
+# "message" String Structure:
+<b>(News Title translated to Traditional Chinese)</b>\n\n(One-sentence core summary, natural human tone)\n\n<b>Crypto</b>\n(Short-term analysis in 1 concise sentence)\n\n<b>總體經濟影響</b>\n(Optional: 1 sentence ONLY if impact is massive; otherwise leave completely empty)\n\n<b>世界發展影響</b>\n(Optional: 1 sentence ONLY if impact is massive; otherwise leave completely empty)\n\n<b>Keywords</b> | <code>Term A</code>, <code>Term B</code>, <code>Term C</code>
 
-(簡單用一句話總結新聞，需去 AI 化)
-
-<b>Crypto</b>
-(短線 Analysis，用簡單的方式精簡說明)
-
-<b>總體經濟影響</b>
-(除非影響極大則用「一句話簡單說明」不然全部省略)
-
-<b>世界發展影響</b>
-(除非影響極大則用「一句話簡單說明」不然全部省略)
-
-<b>Keywords</b> | <code>Term A</code>, <code>Term B</code>, <code>Term C</code>
-
-# Output format:
-Respond with ONLY a raw JSON object (no markdown fences, no commentary) matching this shape:
-{{"tier": <"CRITICAL"|"HIGH"|"MEDIUM"|"LOW">, "relevant": <true|false>, "message": "<the HTML briefing string, or a short reason if not relevant>"}}
-"""
+# Output Format:
+Respond with ONLY a raw JSON object (no markdown code blocks, no preamble, no postscript):
+{
+  "tier": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
+  "relevant": true | false,
+  "message": "HTML string formatted strictly per the rules above"
+}"""
 
 GEMINI_RESPONSE_SCHEMA = {
     "type": "OBJECT",
@@ -316,6 +312,10 @@ async def summarize_with_gemini(session: aiohttp.ClientSession, text: str) -> Op
 # ─── Recent flash context (for telegram_qa.py Q&A) ───────────────────────────
 
 recent_news: deque[dict] = deque(maxlen=CONTEXT_MAX_ITEMS)
+
+# Set once at startup by test_gemini_connection(); when False, handle_item() skips
+# calling Gemini on every item instead of retrying (and failing) per-message.
+GEMINI_AVAILABLE = False
 
 def remember_news(title: str, content: str, tier: Optional[str]) -> None:
     now = time.time()
@@ -352,7 +352,7 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
 
     tier: Optional[str] = None
     summary = ""
-    if GEMINI_API_KEY:
+    if GEMINI_API_KEY and GEMINI_AVAILABLE:
         result = await summarize_with_gemini(session, full_text)
         if result is None:
             # Gemini failed; skip tier filtering and send the original title/content as a fallback
@@ -362,8 +362,10 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
         else:
             tier = result["tier"]
             remember_news(title, content, tier)
-            tier_rank = TIER_RANK.get(tier)
-            if not result["relevant"] or (tier_rank is not None and tier_rank > MAX_TIER_TO_SEND):
+            # Unknown/unparseable tier is treated as the lowest priority (LOW) rather than
+            # bypassing the filter entirely, so MAX_TIER_TO_SEND still applies to it.
+            tier_rank = TIER_RANK.get(tier, TIER_RANK["LOW"])
+            if not result["relevant"] or tier_rank > MAX_TIER_TO_SEND:
                 log.info("Gemini decided tier=%s relevant=%s; skipping push: %s",
                           tier, result["relevant"], (title or content)[:60])
                 return
@@ -434,12 +436,15 @@ async def ws_loop(session: aiohttp.ClientSession) -> None:
 
 
 async def main() -> None:
-    print(f"GEMINI_API_KEY : {mask_key(GEMINI_API_KEY)}")
-    print(f"TELEGRAM_BOT_TOKEN : {mask_key(TELEGRAM_BOT_TOKEN)}")
-    print(f"TELEGRAM_CHAT_ID : {mask_key(TELEGRAM_CHAT_ID)}")
+    print()
+    # print(f"GEMINI_API_KEY : {mask_key(GEMINI_API_KEY)}")
+    # print(f"TELEGRAM_BOT_TOKEN : {mask_key(TELEGRAM_BOT_TOKEN)}")
+    # print(f"TELEGRAM_CHAT_ID : {mask_key(TELEGRAM_CHAT_ID)}")
+    # print()
+    global GEMINI_AVAILABLE
     async with aiohttp.ClientSession() as session:
-        gemini_ok = await test_gemini_connection(session)
-        if not gemini_ok:
+        GEMINI_AVAILABLE = await test_gemini_connection(session)
+        if not GEMINI_AVAILABLE:
             log.warning("Gemini validation failed; subsequent flash updates will skip the summary step.")
 
         if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:

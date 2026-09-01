@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 from typing import Optional
 
 import aiohttp
@@ -12,6 +13,12 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
 log = get_logger("telegram")
+
+
+def _strip_html_tags(text: str) -> str:
+    """Fallback for when Telegram rejects a message due to malformed HTML (400):
+    strip the tags instead of sending them as literal text to the chat."""
+    return re.sub(r"<[^>]+>", "", text)
 
 
 async def send_telegram_message(
@@ -38,7 +45,11 @@ async def send_telegram_message(
 
     use_html = True
     for attempt in range(1, max_attempts + 1):
-        payload = base_payload if use_html else {k: v for k, v in base_payload.items() if k != "parse_mode"}
+        if use_html:
+            payload = base_payload
+        else:
+            payload = {k: v for k, v in base_payload.items() if k != "parse_mode"}
+            payload["text"] = _strip_html_tags(payload["text"])
         try:
             async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status == 200:
