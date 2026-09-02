@@ -247,12 +247,22 @@ Analyze the provided news flash below and respond according to the rules.
 {text}
 
 # Step 1 — Tier Classification:
-- CRITICAL: Direct and immediate impact causing massive short-term volatility in BTC/ETH/Major caps. (e.g., Fed rate decisions, Spot ETF approvals/denials, SEC major regulatory enforcement, tier-1 exchange/institution insolvency, major hack, massive institutional buy/sell, stablecoin de-peg).
-- HIGH: Significant but non-decisive impact. (e.g., CPI/NFP macro data, Fed official hawkish/doveish remarks, ETF net flows, whale transfers, national regulatory policy shifts, key figure crypto statements like Trump/Musk).
-- MEDIUM: Limited or indirect impact. (e.g., Single protocol update, mid/small exchange news, altcoin price moves, industry reports).
-- LOW: Irrelevant or negligible connection to crypto.
+- CRITICAL: Direct and immediate impact with a high probability of causing massive short-term volatility in BTC/ETH or major crypto markets. Typically involves major market-moving events that can rapidly change liquidity, regulation, systemic risk, or institutional positioning.
+  (e.g., Fed rate decisions, Spot ETF approvals/denials, SEC major regulatory enforcement, tier-1 exchange insolvency, major crypto/stablecoin hack, major stablecoin de-peg, massive institutional buy/sell, sudden systemic liquidity crisis).
 
-Set "relevant" to false ONLY if the news has zero connection to crypto (tier MUST be LOW).
+- HIGH: Clear and meaningful impact on crypto markets, with a reasonable potential to affect BTC/ETH prices, sentiment, liquidity, or positioning in the short term, but unlikely to independently cause extreme or market-wide volatility.
+  (e.g., CPI/NFP macro data, important Fed official remarks, significant ETF net-flow changes, major whale transfers, major national crypto regulatory policy shifts, significant institutional adoption or investment announcements, major statements from influential figures such as Trump/Musk when directly related to crypto).
+
+- MEDIUM: Relevant to the crypto industry or market sentiment, but the direct short-term price impact on BTC/ETH is limited, uncertain, or likely to be temporary. Usually affects a specific sector, protocol, company, or group of assets rather than the broader crypto market.
+  (e.g., single protocol upgrades, major-but-non-systemic exchange developments, token-specific news, moderate whale activity, crypto industry reports, partnerships, funding announcements, individual asset price movements, non-critical regulatory developments).
+
+- LOW: Weak, indirect, niche, or negligible connection to BTC/ETH or the broader crypto market. Unlikely to materially affect short-term market sentiment, liquidity, or positioning.
+  (e.g., minor protocol updates, small exchange announcements, routine company news, minor partnerships, promotional activities, low-cap token movements, opinion pieces, general industry commentary).
+
+1. Set "relevant" to false ONLY if the news has zero connection to crypto (tier MUST be LOW).
+2. Do not classify a news item as HIGH merely because it is important to the crypto industry.
+3. HIGH should be reserved for events that have a credible and meaningful probability of affecting BTC/ETH or the broader crypto market in the short term.
+4. When uncertain between two levels, prefer the lower level.
 
 # Step 2 — Briefing Format Rules:
 Write "message" as an HTML-formatted briefing string strictly adhering to:
