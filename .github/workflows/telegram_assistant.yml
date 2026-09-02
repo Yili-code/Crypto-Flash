@@ -12,7 +12,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,26 +25,29 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          else
-            pip install aiohttp python-dotenv
-          fi
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
 
-      - name: Restore recent news context (best-effort)
+      - name: Restore recent news context
         uses: actions/cache/restore@v4
         with:
           path: data/recent_news.json
-          key: recent-news-${{ github.run_id }}
+          key: recent-news-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
+            recent-news-${{ runner.os }}-
             recent-news-
 
-      - name: Run Telegram QA bot
-        timeout-minutes: 350
+      - name: Run Telegram Assistant
         env:
           TELEGRAM_BOT_TOKEN_01: ${{ secrets.TELEGRAM_BOT_TOKEN_01 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
         run: python src/telegram_assistant.py
+
+      - name: Save recent news context
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/recent_news.json
+          key: recent-news-${{ runner.os }}-${{ github.run_id }}
