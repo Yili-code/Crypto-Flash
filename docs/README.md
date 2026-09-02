@@ -53,7 +53,7 @@
 - 關鍵字過濾：支援內建關鍵字清單，也可用 `KEYWORDS_FILE` 自訂
 - Gemini 分級與摘要：`src/gemini.py`
 - Telegram 推播：`src/tg01.py`
-- Telegram 對話問答：`src/telegram_qa.py`
+- Telegram 對話問答：`src/telegram_assistant.py`
 - 共享近期新聞上下文：`data/recent_news.json`
 - GitHub Actions 自動執行：每 6 小時排程一次，支援手動觸發
 
@@ -74,10 +74,10 @@ Telegram 推播
    ↓
 寫入 data/recent_news.json
    ↓
-telegram_qa.py 依背景資料回答 Telegram 問題
+telegram_assistant.py 依背景資料回答 Telegram 問題
 ```
 
-`jin10_monitor.py` 和 `telegram_qa.py` 是兩個獨立流程，共同使用 `recent_news.json` 作為近期快訊上下文。
+`jin10_monitor.py` 和 `telegram_assistant.py` 是兩個獨立流程，共同使用 `recent_news.json` 作為近期快訊上下文。
 
 ---
 
@@ -116,7 +116,7 @@ python src/jin10_monitor.py
 ### 5. 啟動 Telegram 問答腳本（可選）
 
 ```bash
-python src/telegram_qa.py
+python src/telegram_assistant.py
 ```
 
 在群組中可直接 @ 機器人或使用 `/ask`；私人聊天則可直接輸入問題。
@@ -130,7 +130,7 @@ python src/telegram_qa.py
 | Workflow | 作用 |
 |---|---|
 | `flash_monitor.yml` | 執行 `src/jin10_monitor.py`，監控快訊並推播 |
-| `telegram_qa.yml` | 執行 `src/telegram_qa.py`，接收 Telegram 問題並回答 |
+| `telegram_assistant.yml` | 執行 `src/telegram_assistant.py`，接收 Telegram 問題並回答 |
 
 在 GitHub 的 `Settings → Secrets and variables → Actions` 中新增：
 

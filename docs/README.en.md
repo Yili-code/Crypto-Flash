@@ -53,7 +53,7 @@ This is a GitHub Actions-driven automation project for tracking and filtering Ji
 - Keyword filtering with built-in defaults and optional `KEYWORDS_FILE`
 - Gemini grading and summary logic: `src/gemini.py`
 - Telegram push messaging: `src/tg01.py`
-- Telegram Q&A listener: `src/telegram_qa.py`
+- Telegram Q&A listener: `src/telegram_assistant.py`
 - Shared recent-news context: `data/recent_news.json`
 - Scheduled execution via GitHub Actions every 6 hours
 
@@ -74,10 +74,10 @@ Telegram push
    ↓
 Save to data/recent_news.json
    ↓
-telegram_qa.py answers questions using recent context
+telegram_assistant.py answers questions using recent context
 ```
 
-`jin10_monitor.py` and `telegram_qa.py` run as separate processes and share the same `recent_news.json` file for context.
+`jin10_monitor.py` and `telegram_assistant.py` run as separate processes and share the same `recent_news.json` file for context.
 
 ---
 
@@ -116,7 +116,7 @@ python src/jin10_monitor.py
 ### 5. Run the Telegram Q&A bot (optional)
 
 ```bash
-python src/telegram_qa.py
+python src/telegram_assistant.py
 ```
 
 In a Telegram group, you can mention the bot or use `/ask`; in private chat, you can send a question directly.
@@ -130,7 +130,7 @@ This project includes two workflows:
 | Workflow | Purpose |
 |---|---|
 | `flash_monitor.yml` | Runs `src/jin10_monitor.py` on a schedule and pushes filtered news |
-| `telegram_qa.yml` | Runs `src/telegram_qa.py` to answer Telegram questions |
+| `telegram_assistant.yml` | Runs `src/telegram_assistant.py` to answer Telegram questions |
 
 Set these in GitHub `Settings → Secrets and variables → Actions`:
 

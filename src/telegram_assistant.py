@@ -90,12 +90,12 @@ def extract_question(text: str, bot_username: str, chat_type: str) -> Optional[s
 
 # ─── Main loop ─────────────────────────────────────────────────────────────────
 
-async def telegram_qa_loop(session: aiohttp.ClientSession) -> None:
+async def telegram_assistant_loop(session: aiohttp.ClientSession) -> None:
     bot_username = await get_bot_username(session)
     if bot_username:
-        log.info("Telegram Q&A listener started. Bot username: @%s", bot_username)
+        log.info("Telegram Assistant listener started. Bot username: @%s", bot_username)
     else:
-        log.info("Telegram Q&A listener started (bot username not available; in groups, use the /ask command)")
+        log.info("Telegram Assistant listener started (bot username not available; in groups, use the /ask command)")
 
     url = f"{TELEGRAM_API}/getUpdates"
     offset: Optional[int] = None
@@ -150,7 +150,7 @@ async def main() -> None:
         log.warning("GEMINI_API_KEY is not set; Q&A will always return a failure message")
 
     async with aiohttp.ClientSession() as session:
-        await telegram_qa_loop(session)
+        await telegram_assistant_loop(session)
 
 
 if __name__ == "__main__":

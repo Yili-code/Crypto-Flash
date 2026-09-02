@@ -12,7 +12,7 @@ TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_01}"
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "")
-GITHUB_WORKFLOW_FILE = os.getenv("GITHUB_WORKFLOW_FILE", "telegram_qa.yml")
+GITHUB_WORKFLOW_FILE = os.getenv("GITHUB_WORKFLOW_FILE", "telegram_assistant.yml")
 
 
 async def check_webhook(session: aiohttp.ClientSession) -> None:
@@ -59,7 +59,7 @@ async def check_polling_conflict(session: aiohttp.ClientSession) -> None:
     if resp.status == 409:
         print(f"❌ 409 Conflict: {body.get('description', '')}")
         print("    Another process is currently polling getUpdates.")
-        print("    Check: local telegram_qa.py instance or running GitHub Actions job.")
+        print("    Check: local telegram_assistant.py instance or running GitHub Actions job.")
     elif resp.status == 200:
         print("✅ No conflict detected at this moment.")
         print("Note: This is a point-in-time check; run multiple times for intermittent issues.")

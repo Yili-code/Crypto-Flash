@@ -316,7 +316,7 @@ async def summarize_with_gemini(session: aiohttp.ClientSession, text: str) -> Op
     }
 
 
-# ─── Recent flash context (for telegram_qa.py Q&A) ───────────────────────────
+# ─── Recent flash context (for telegram_assistant.py Q&A) ───────────────────────────
 
 recent_news: deque[dict] = deque(maxlen=CONTEXT_MAX_ITEMS)
 
