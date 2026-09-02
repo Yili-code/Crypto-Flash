@@ -9,6 +9,7 @@ import aiohttp
 from common import get_logger
 
 TELEGRAM_BOT_TOKEN_01 = os.getenv("TELEGRAM_BOT_TOKEN_01", "")
+TELEGRAM_BOT_TOKEN_02 = os.getenv("TELEGRAM_BOT_TOKEN_02", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_01}"
 
