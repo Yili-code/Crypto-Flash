@@ -1,12 +1,10 @@
-<div align="center">
+﻿<div align="center">
 
 # Jin10 News Scraper
 
-**Completely Free x Actively Developed**
+**Free x Always-on**
 
-A serverless assistant that watches the Jin10 (金十數據) WebSocket feed 24/7. When a news item matches your keywords, it gets summarized by Gemini and pushed straight to your Telegram — instantly (keywords are fully customizable). You can also ask it questions directly in Telegram, and it will answer using the recent news it has been monitoring.
-
-Runs 24/7 via GitHub Actions, and works fine in both groups and DMs.
+This project continuously watches the Jin10 WebSocket feed. When a news item matches your keywords, Gemini grades and summarizes it, then the result is pushed to Telegram. You can also ask questions directly in Telegram, and the bot will use recent monitored flash news as background context.
 
 [![GitHub Actions](https://img.shields.io/badge/Automation-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](.)
@@ -23,135 +21,175 @@ Runs 24/7 via GitHub Actions, and works fine in both groups and DMs.
 <tr>
 <td align="center" width="33%">
 <img src="../assets/demo001.jpg" width="100%"><br>
-<sub><b>Tiered Push Notifications</b><br>Gemini ranks each news item by importance</sub>
+<sub><b>Tiered Push</b><br>Gemini grades the event by importance</sub>
 </td>
 <td align="center" width="33%">
 <img src="../assets/demo002.jpg" width="100%"><br>
-<sub><b>AI Real-time Q&A</b><br>Combines pushed news history with its own reasoning</sub>
+<sub><b>AI Real-time Q&A</b><br>Uses recent flash news as answer context</sub>
 </td>
 </tr>
 </table>
 </div>
 
-## What is this
+---
 
-Jin10 fires off hundreds to thousands of flash news items every day, and roughly 90% of it is noise. This script connects directly to Jin10's private WebSocket protocol, parses every message, and **only acts when a message matches keywords you care about**: it hands only the relevant item to Gemini, then automatically and instantly pushes the result to Telegram.
+## Project overview
 
-No polling, no delay, no server bill — everything runs on GitHub Actions, completely free, always-on, and self-restarting.
+This is a GitHub Actions-driven automation project for tracking and filtering Jin10 flash news, keeping only the items that matter most.
 
-All you have to do is wait for the notification on your phone — and if that's not enough, you can follow up directly in Telegram, e.g. "What does this news mean for BTC in the short term?", and it will give you a supplementary analysis based on the context of the news it has recently monitored.
+### What it does
 
-## Why it's worth a look
+- Connects directly to Jin10 WebSocket feeds
+- Parses messages and removes noise with keyword filtering
+- Sends relevant items to Gemini for grading and summary
+- Pushes important updates to Telegram
+- Adds a Telegram Q&A mode with recent context memory
 
-- **Not scraping, a real connection** — reverse-engineered Jin10's binary WebSocket protocol (XOR encryption, custom packet format), not a laggy RSS feed or polling API.
+---
 
-- **Keyword-ready out of the box** — comes with a built-in keyword library covering geopolitics, central bank moves, commodities, and crypto; or you can supply your own fully custom `.txt` file.
+## Features
 
-- **Not a translation, a briefing** — Gemini isn't just "translating," it runs on a persona-based prompt (think Jarvis from Iron Man), producing structured output covering macroeconomic impact, crypto short/long-term trends, and key term explanations — ready to read at a glance.
+- WebSocket monitor with auto-reconnect: `src/jin10_monitor.py`
+- Keyword filtering with built-in defaults and optional `KEYWORDS_FILE`
+- Gemini grading and summary logic: `src/gemini.py`
+- Telegram push messaging: `src/tg01.py`
+- Telegram Q&A listener: `src/telegram_qa.py`
+- Shared recent-news context: `data/recent_news.json`
+- Scheduled execution via GitHub Actions every 6 hours
 
-- **Not just push, you can also ask** — a separate script, `telegram_qa.py`, lets you ask the bot questions directly in Telegram; it pulls in the flash news it has monitored over the past few hours as background context before answering. No `@` needed in DMs; in groups, mention `@your_bot_username explain PCE's impact on rate hikes/cuts` or use the `/ask` command (see example image above). It runs as a completely separate process from the monitoring script, so the two don't interfere with each other.
-
-- **Zero infrastructure** — no database, no cloud host, no Docker. The whole system is one `.py` file plus one workflow file.
-
-- **Self-healing, always-on** — automatically reconnects on disconnect; wraps up cleanly before GitHub Actions times out, and the next scheduled run picks up seamlessly, so in theory it can run uninterrupted 24/7.
+---
 
 ## How it works
 
-```
-Jin10 WebSocket ──▶ Parse binary packets ──▶ Keyword matching
-
-                                          │ Match
-                                          ▼
-                                    Gemini tiering + summary + filtering
-
-                                          │
-                              ┌───────────┴───────────┐
-                              ▼                        ▼
-                       Instant Telegram push      Write to recent_news.json
-
-                                                        │
-                                                        ▼
-                                          telegram_qa.py runs continuously in background
-
-                                                        │
-                        Telegram message ──▶ Detect if it's a question ──▶ Gemini answers ──▶ Reply
+```text
+Jin10 WebSocket
+   ↓
+Binary packet parsing
+   ↓
+Keyword matching
+   ↓
+Gemini tiering + summarization
+   ↓
+Telegram push
+   ↓
+Save to data/recent_news.json
+   ↓
+telegram_qa.py answers questions using recent context
 ```
 
-`jin10_monitor.py` (monitoring + push) runs as a single GitHub Actions job, restarted every 6 hours via cron; if it disconnects mid-run, the script itself auto-reconnects, no manual intervention needed.
+`jin10_monitor.py` and `telegram_qa.py` run as separate processes and share the same `recent_news.json` file for context.
 
-### Two independent processes
+---
 
-The project is split into two independent scripts that can be deployed and restarted separately:
+## Quick start
 
-| Script | Responsibility | Trigger |
-|---|---|---|
-| `jin10_monitor.py` | Connects to the Jin10 WebSocket, matches keywords, has Gemini tier and summarize, pushes to Telegram | Runs continuously |
-| `telegram_qa.py` | Polls Telegram's `getUpdates`, detects whether a message is a question, calls Gemini to answer | Runs continuously |
+### 1. Clone or fork the repo
 
-The two scripts exchange "recent news" through a shared file, `recent_news.json` (`NEWS_CONTEXT_FILE`): every time `jin10_monitor.py` finishes evaluating a news item, it writes the recent record to this file; before answering a question, `telegram_qa.py` reads it to build background context. As long as both scripts read/write the same file (same machine / same persistent storage), one restarting or temporarily going down won't affect the other. If `telegram_qa.py` can't find the file, it will still answer normally, just without recent news context.
+```bash
+git clone https://github.com/<your-user>/<your-repo>.git
+cd jin10_news_scraper
+```
 
-## Quick Start
+### 2. Configure environment variables
 
-### 1. Fork / Clone this repo
+Copy `.env.example` to `.env` and fill in the values:
 
-### 2. Set up Secrets
+```env
+TELEGRAM_BOT_TOKEN=""
+TELEGRAM_CHAT_ID=""
+GEMINI_API_KEY=""
+GEMINI_MODEL="gemini-3.5-flash-lite"
+```
 
-Go to the repo's `Settings → Secrets and variables → Actions` and add:
+### 3. Install dependencies
 
-| Secret Name | Description |
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Run the monitor
+
+```bash
+python src/jin10_monitor.py
+```
+
+### 5. Run the Telegram Q&A bot (optional)
+
+```bash
+python src/telegram_qa.py
+```
+
+In a Telegram group, you can mention the bot or use `/ask`; in private chat, you can send a question directly.
+
+---
+
+## GitHub Actions deployment
+
+This project includes two workflows:
+
+| Workflow | Purpose |
 |---|---|
-| `GEMINI_API_KEY` | Gemini API key from Google AI Studio |
-| `TELEGRAM_BOT_TOKEN` | Bot token created via [@BotFather](https://t.me/BotFather) |
-| `TELEGRAM_CHAT_ID` | The channel / group / individual Chat ID that should receive pushes |
+| `flash_monitor.yml` | Runs `src/jin10_monitor.py` on a schedule and pushes filtered news |
+| `telegram_qa.yml` | Runs `src/telegram_qa.py` to answer Telegram questions |
 
-### 3. (Optional) Customize keywords
+Set these in GitHub `Settings → Secrets and variables → Actions`:
 
-Create a plain text file with one keyword per line, and set the `KEYWORDS_FILE` environment variable in the workflow to point to it. Leave it empty to use the built-in keyword library.
+| Secret / Variable | Description |
+|---|---|
+| `GEMINI_API_KEY` | Gemini API key |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token |
+| `TELEGRAM_CHAT_ID` | Target chat ID for pushes |
+| `GEMINI_MODEL` | Optional; defaults to `gemini-3.5-flash-lite` |
 
-### 4. Open Actions
+The monitor workflow runs every 6 hours and also supports manual `workflow_dispatch`.
 
-After forking, go to the `Actions` tab and manually trigger `workflow_dispatch` once, or wait for the scheduled run to trigger automatically. On first startup, the script validates the Gemini API key and reports the result in the logs.
+---
 
-### 5. (Optional) Enable Telegram Q&A
+## Configurable environment variables
 
-If you want to ask the bot questions directly in Telegram, start `telegram_qa.py` separately (you can reuse the same set of Secrets, run it as an extra job/schedule, or on any machine that can keep a Python process running). It's a separate process from the monitoring script, so restarting one doesn't affect the other; as long as both can read/write the same `recent_news.json`, Q&A will automatically pull in recently monitored news as context.
-
-## Environment Variables
-
-### Shared (read by both scripts)
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `TELEGRAM_BOT_TOKEN` | — | Telegram Bot Token |
-| `TELEGRAM_CHAT_ID` | — | Push target / allowed Chat ID for Q&A (leave empty in `telegram_qa.py` to not restrict source chat) |
-| `GEMINI_API_KEY` | — | Gemini API key |
-| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model used |
-| `NEWS_CONTEXT_FILE` | `recent_news.json` | Shared file path the two scripts use to exchange "recent news" |
-| `CONTEXT_MAX_AGE_SEC` | `21600` (6 hours) | How long recent news is retained before it's excluded from Q&A context |
-
-### `jin10_monitor.py`-specific
+### Shared settings
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `MAX_TIER_TO_SEND` | `MEDIUM` | Push threshold — only news rated by Gemini at this importance level or higher gets pushed (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`) |
-| `KEYWORDS_FILE` | empty | Path to a custom keyword list; leave empty to use the built-in keyword library |
-| `WS_URLS` | `wss://wss-flash-2.jin10.com/` | Jin10 WebSocket endpoint(s); comma-separate multiple for rotation |
-| `WS_IDLE_TIMEOUT` | `180` | Seconds without a message before it's considered disconnected and reconnects |
-| `WS_RECONNECT_DELAY` | `5` | Seconds to wait before reconnecting |
-| `CONTEXT_MAX_ITEMS` | `80` | Maximum number of recent news items retained in the context file |
+| `TELEGRAM_BOT_TOKEN` | empty | Telegram Bot Token |
+| `TELEGRAM_CHAT_ID` | empty | Push target / source chat guard for Q&A |
+| `GEMINI_API_KEY` | empty | Gemini API key |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model to use |
+| `NEWS_CONTEXT_FILE` | `data/recent_news.json` | Shared recent-news cache |
+| `CONTEXT_MAX_AGE_SEC` | `21600` | Max age for background context |
 
-### `telegram_qa.py`-specific
+### Monitor settings
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `CONTEXT_SNIPPET_LIMIT` | `40` | Maximum number of recent news items included as context when answering a question |
+| `MAX_TIER_TO_SEND` | `MEDIUM` | Only send pushes when the Gemini tier meets this threshold |
+| `KEYWORDS_FILE` | empty | Optional custom keyword file |
+| `WS_URLS` | `wss://wss-flash-2.jin10.com/` | Jin10 WebSocket endpoint |
+| `WS_IDLE_TIMEOUT` | `180` | Reconnect if no traffic is seen |
+| `WS_RECONNECT_DELAY` | `5` | Delay before reconnect |
+| `CONTEXT_MAX_ITEMS` | `80` | Max recent items retained |
+
+### Q&A settings
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CONTEXT_SNIPPET_LIMIT` | `40` | Number of recent items included in the answer prompt |
+
+---
+
+## Important notes
+
+- This project is meant for technical learning, monitoring, and personal research.
+- The scraped content remains the property of Jin10.
+- Gemini-generated summaries are auxiliary analysis and not investment advice.
+- Final decisions should be based on official releases and current market conditions.
 
 ## Disclaimer
 
-This project is for technical learning and personal information organization purposes only. Copyright of the scraped content belongs to Jin10 Data (金十數據). The AI-generated analysis is only a machine-generated summary and **does not constitute investment advice**. Markets carry risk; please verify independently before making any decisions.
+AI-generated summaries and analysis are for reference only and do not constitute investment advice. Markets are risky; do your own research before making financial decisions.
 
 <div align="center">
 
-<b>If this saves you time scrolling for news, consider giving it a star</b>
+<b>If this project saved you time filtering market noise, consider giving it a star.</b>
 
 </div>
