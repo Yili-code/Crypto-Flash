@@ -7,7 +7,7 @@ import aiohttp
 
 from common import get_logger, load_recent_news
 from gemini import GEMINI_API_KEY, call_gemini
-from tg01 import (
+from tg import (
     TELEGRAM_API,
     TELEGRAM_BOT_TOKEN_01,
     TELEGRAM_CHAT_ID,

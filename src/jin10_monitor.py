@@ -22,7 +22,7 @@ from common import (
     save_recent_news,
 )
 from gemini import GEMINI_API_KEY, call_gemini, test_gemini_connection, mask_key
-from tg01 import TELEGRAM_BOT_TOKEN_01, TELEGRAM_CHAT_ID, send_telegram_message
+from tg import TELEGRAM_BOT_TOKEN_01, TELEGRAM_CHAT_ID, send_telegram_message
 
 log = get_logger("jin10")
 
