@@ -1,4 +1,4 @@
-name: Telegram QA Bot
+name: Telegram Assistant
 
 on:
   schedule:
