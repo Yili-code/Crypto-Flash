@@ -37,7 +37,7 @@ async def call_gemini(
     if extra_parts and isinstance(extra_parts, list):
         parts.extend(extra_parts)
 
-    payload: dict = {"contents": [{"parts": [{"text": prompt}]}]}
+    payload: dict = {"contents": [{"parts": parts}]}
 
     # 02 -> system instruction
     system_instruction = kwargs.get("system_instruction")
