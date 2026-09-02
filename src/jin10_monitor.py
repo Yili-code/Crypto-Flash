@@ -272,12 +272,9 @@ Write "message" as an HTML-formatted briefing string strictly adhering to:
 <b>(News Title translated to Traditional Chinese)</b>\n\n(One-sentence core summary, natural human tone)\n\n<b>Crypto</b>\n(Short-term analysis in 1 concise sentence)\n\n<b>總體經濟影響</b>\n(Optional: 1 sentence ONLY if impact is massive; otherwise leave completely empty)\n\n<b>世界發展影響</b>\n(Optional: 1 sentence ONLY if impact is massive; otherwise leave completely empty)\n\n<b>Keywords</b> | <code>Term A</code>, <code>Term B</code>, <code>Term C</code>
 
 # Output Format:
-Respond with ONLY a raw JSON object (no markdown code blocks, no preamble, no postscript):
-{
-  "tier": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-  "relevant": true | false,
-  "message": "HTML string formatted strictly per the rules above"
-}"""
+Respond with ONLY a raw JSON object (no markdown fences, no commentary) matching this shape:
+{{"tier": <"CRITICAL"|"HIGH"|"MEDIUM"|"LOW">, "relevant": <true|false>, "message": "<the HTML briefing string, or a short reason if not relevant>"}}
+"""
 
 GEMINI_RESPONSE_SCHEMA = {
     "type": "OBJECT",
@@ -431,7 +428,11 @@ async def ws_loop(session: aiohttp.ClientSession) -> None:
             log.warning("WebSocket received no messages for %.0fs; reconnecting", WS_IDLE_TIMEOUT)
             await asyncio.sleep(WS_RECONNECT_DELAY)
         except Exception as exc:
-            log.warning("WebSocket disconnected: %s; reconnecting in %ss", exc, WS_RECONNECT_DELAY)
+            log.warning(
+                "WebSocket disconnected: %s: %s; reconnecting in %ss",
+                type(exc).__name__, exc, WS_RECONNECT_DELAY,
+            )
+            log.debug("Full traceback:", exc_info=True)
             await asyncio.sleep(WS_RECONNECT_DELAY)
 
 
