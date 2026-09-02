@@ -22,7 +22,7 @@ from common import (
     save_recent_news,
 )
 from gemini import GEMINI_API_KEY, call_gemini, test_gemini_connection, mask_key
-from tg01 import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, send_telegram_message
+from tg01 import TELEGRAM_BOT_TOKEN_01, TELEGRAM_CHAT_ID, send_telegram_message
 
 log = get_logger("jin10")
 
@@ -449,7 +449,7 @@ async def ws_loop(session: aiohttp.ClientSession) -> None:
 async def main() -> None:
     print()
     # print(f"GEMINI_API_KEY : {mask_key(GEMINI_API_KEY)}")
-    # print(f"TELEGRAM_BOT_TOKEN : {mask_key(TELEGRAM_BOT_TOKEN)}")
+    # print(f"TELEGRAM_BOT_TOKEN_01 : {mask_key(TELEGRAM_BOT_TOKEN_01)}")
     # print(f"TELEGRAM_CHAT_ID : {mask_key(TELEGRAM_CHAT_ID)}")
     # print()
     global GEMINI_AVAILABLE
@@ -458,8 +458,8 @@ async def main() -> None:
         if not GEMINI_AVAILABLE:
             log.warning("Gemini validation failed; subsequent flash updates will skip the summary step.")
 
-        if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-            log.warning("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID are not set; Telegram push notifications will be skipped")
+        if not TELEGRAM_BOT_TOKEN_01 or not TELEGRAM_CHAT_ID:
+            log.warning("TELEGRAM_BOT_TOKEN_01 / TELEGRAM_CHAT_ID are not set; Telegram push notifications will be skipped")
 
         await ws_loop(session)
 

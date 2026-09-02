@@ -95,7 +95,7 @@ cd jin10_news_scraper
 複製 `.env.example` 成為 `.env`，並填入你的設定：
 
 ```env
-TELEGRAM_BOT_TOKEN=""
+TELEGRAM_BOT_TOKEN_01=""
 TELEGRAM_CHAT_ID=""
 GEMINI_API_KEY=""
 GEMINI_MODEL="gemini-3.5-flash-lite"
@@ -137,7 +137,7 @@ python src/telegram_qa.py
 | Secret / Variable | 說明 |
 |---|---|
 | `GEMINI_API_KEY` | Google AI Studio 的 Gemini API 金鑰 |
-| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token |
+| `TELEGRAM_BOT_TOKEN_01` | Telegram Bot Token |
 | `TELEGRAM_CHAT_ID` | 推播目標聊天室或群組 ID |
 | `GEMINI_MODEL` | 可選，預設為 `gemini-3.5-flash-lite` |
 
@@ -151,7 +151,7 @@ python src/telegram_qa.py
 
 | 變數 | 預設值 | 用途 |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | 空 | Telegram Bot Token |
+| `TELEGRAM_BOT_TOKEN_01` | 空 | Telegram Bot Token |
 | `TELEGRAM_CHAT_ID` | 空 | 推播目標 / 問答來源限制 |
 | `GEMINI_API_KEY` | 空 | Gemini API 金鑰 |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | 生成模型 |

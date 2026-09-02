@@ -8,9 +8,9 @@ import aiohttp
 
 from common import get_logger
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_BOT_TOKEN_01 = os.getenv("TELEGRAM_BOT_TOKEN_01", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_01}"
 
 log = get_logger("telegram")
 
@@ -29,7 +29,7 @@ async def send_telegram_message(
     reply_to: Optional[int] = None,
     max_attempts: int = 3,
 ) -> bool:
-    if not TELEGRAM_BOT_TOKEN or not chat_id:
+    if not TELEGRAM_BOT_TOKEN_01 or not chat_id:
         log.warning("Telegram is not configured; skipping send:\n%s", text[:200])
         return False
 

@@ -95,7 +95,7 @@ cd jin10_news_scraper
 Copy `.env.example` to `.env` and fill in the values:
 
 ```env
-TELEGRAM_BOT_TOKEN=""
+TELEGRAM_BOT_TOKEN_01=""
 TELEGRAM_CHAT_ID=""
 GEMINI_API_KEY=""
 GEMINI_MODEL="gemini-3.5-flash-lite"
@@ -137,7 +137,7 @@ Set these in GitHub `Settings → Secrets and variables → Actions`:
 | Secret / Variable | Description |
 |---|---|
 | `GEMINI_API_KEY` | Gemini API key |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token |
+| `TELEGRAM_BOT_TOKEN_01` | Telegram bot token |
 | `TELEGRAM_CHAT_ID` | Target chat ID for pushes |
 | `GEMINI_MODEL` | Optional; defaults to `gemini-3.5-flash-lite` |
 
@@ -151,7 +151,7 @@ The monitor workflow runs every 6 hours and also supports manual `workflow_dispa
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | empty | Telegram Bot Token |
+| `TELEGRAM_BOT_TOKEN_01` | empty | Telegram Bot Token |
 | `TELEGRAM_CHAT_ID` | empty | Push target / source chat guard for Q&A |
 | `GEMINI_API_KEY` | empty | Gemini API key |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model to use |

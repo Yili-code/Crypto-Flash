@@ -9,7 +9,7 @@ from common import get_logger, load_recent_news
 from gemini import GEMINI_API_KEY, call_gemini
 from tg01 import (
     TELEGRAM_API,
-    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_BOT_TOKEN_01,
     TELEGRAM_CHAT_ID,
     get_bot_username,
     send_telegram_message,
@@ -143,8 +143,8 @@ async def telegram_qa_loop(session: aiohttp.ClientSession) -> None:
 
 
 async def main() -> None:
-    if not TELEGRAM_BOT_TOKEN:
-        log.error("TELEGRAM_BOT_TOKEN is not set; the Q&A service cannot start")
+    if not TELEGRAM_BOT_TOKEN_01:
+        log.error("TELEGRAM_BOT_TOKEN_01 is not set; the Q&A service cannot start")
         return
     if not GEMINI_API_KEY:
         log.warning("GEMINI_API_KEY is not set; Q&A will always return a failure message")

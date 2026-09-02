@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+TELEGRAM_BOT_TOKEN_01 = os.getenv("TELEGRAM_BOT_TOKEN_01", "")
+TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_01}"
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "")
@@ -108,8 +108,8 @@ async def check_github_actions(session: aiohttp.ClientSession) -> None:
 
 
 async def main() -> None:
-    if not TELEGRAM_BOT_TOKEN:
-        print("[ERROR] TELEGRAM_BOT_TOKEN not set in .env or environment.")
+    if not TELEGRAM_BOT_TOKEN_01:
+        print("[ERROR] TELEGRAM_BOT_TOKEN_01 not set in .env or environment.")
         return
 
     async with aiohttp.ClientSession() as session:
