@@ -5,14 +5,13 @@ from typing import Optional
 
 import aiohttp
 
-from common import (
-    GEMINI_API_KEY,
+from common import get_logger, load_recent_news
+from gemini import GEMINI_API_KEY, call_gemini
+from tg01 import (
     TELEGRAM_API,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
-    call_gemini,
-    get_logger,
-    load_recent_news,
+    get_bot_username,
     send_telegram_message,
 )
 
@@ -21,12 +20,12 @@ log = get_logger("jin10-qa")
 CONTEXT_SNIPPET_LIMIT = int(os.getenv("CONTEXT_SNIPPET_LIMIT", "40"))
 
 
-# ─── 近期快訊上下文（讀取 jin10_monitor.py 寫出的共用檔） ────────────────────
+# ─── Recent flash context (read from the shared file written by jin10_monitor.py) ────────────────────
 
 def build_context_snippet(limit: int = CONTEXT_SNIPPET_LIMIT) -> str:
     items = load_recent_news()[-limit:]
     if not items:
-        return "（目前沒有近期快訊紀錄）"
+        return "(There is no recent flash-news record at the moment)"
     lines = []
     for it in items:
         clock = time.strftime("%H:%M", time.localtime(it["ts"]))
@@ -38,24 +37,24 @@ def build_context_snippet(limit: int = CONTEXT_SNIPPET_LIMIT) -> str:
     return "\n".join(lines)
 
 
-# ─── Telegram 問答（Gemini） ─────────────────────────────────────────────────
+# ─── Telegram Q&A (Gemini) ────────────────────────────────────────────────────
 
 QA_PROMPT = """You are Jarvis, an elite AI advisor to Sir, specializing in cryptocurrency and macro market intelligence. Sir is asking you a question directly in Telegram — answer it as his trusted analyst.
 
-# 你近期監控到、且已判定與加密貨幣/總經相關的快訊列表（僅供參考背景，時間為系統本地時間，若與問題無關可忽略，不要虛構列表中沒有的具體數字）：
+# The list of recent flash updates you have monitored and judged to be relevant to crypto/macroeconomics (for background only; times are in local system time. If a message is unrelated to the question, ignore it. Do not invent concrete figures that are not in the list):
 {context}
 
-# Sir 的問題：
+# Sir's question:
 {question}
 
-# 回覆規則：
-1. Persona：專業、犀利、內斂而忠誠，零廢話，不要有問候語或客套語。
-2. 主要語言：繁體中文（絕對不能出現簡體中文）。
-3. 以下詞彙一律保留英文原文，不要附加中文翻譯：地緣政治/地名（US, Israel, Ukraine, Taiwan, EU）、金融機構與關鍵實體（Fed, OPEC, SEC, BRK, Trump）、科技/加密/總經術語（Layer 2, Liquidity, FVG, CPI, PCE, Bullish）。
-4. 不要輸出「中國台灣」，一律使用「台灣」。
-5. 只能使用 HTML 的 <b>...</b>、<i>...</i>、<code>...</code> 標籤，不要使用任何其他 HTML 標籤，也不要使用 Markdown（例如 ** 或 #）。
-6. 回答要有觀點、精簡扼要，直接切入重點；若上面的快訊列表不足以回答，可依你自身的總經/地緣政治/市場知識合理分析，但要清楚區分「已知快訊」與「你的推論判斷」。
-7. 直接輸出最終要傳給 Sir 的訊息內容即可，不要輸出 JSON、不要加前綴說明。
+# Response rules:
+1. Persona: professional, sharp, restrained, and loyal. Zero fluff; no greetings or pleasantries.
+2. Primary language: Traditional Chinese (no simplified Chinese at all).
+3. Keep the following terms in their original English form without adding Chinese translations: geopolitical/place names (US, Israel, Ukraine, Taiwan, EU), financial institutions and key entities (Fed, OPEC, SEC, BRK, Trump), and technology/crypto/macro terms (Layer 2, Liquidity, FVG, CPI, PCE, Bullish).
+4. Do NOT output "中國台灣"; always use "台灣".
+5. Only use HTML tags <b>...</b>, <i>...</i>, and <code>...</code>. Do not use any other HTML tags or Markdown (for example, ** or #).
+6. The answer should be opinionated, concise, and direct; get to the core point immediately. If the flash list above is insufficient to answer the question, you may apply your own macro/geopolitical/market knowledge, but clearly separate "known flash updates" from "your inference and judgment".
+7. Output only the final message to send to Sir. Do not output JSON or add any prefix or explanation.
 """
 
 async def ask_gemini_qa(session: aiohttp.ClientSession, question: str) -> Optional[str]:
@@ -63,19 +62,10 @@ async def ask_gemini_qa(session: aiohttp.ClientSession, question: str) -> Option
     return await call_gemini(session, prompt, timeout=30)
 
 
-# ─── Telegram getMe / getUpdates ────────────────────────────────────────────
-
-async def get_bot_username(session: aiohttp.ClientSession) -> str:
-    try:
-        async with session.get(f"{TELEGRAM_API}/getMe", timeout=aiohttp.ClientTimeout(total=10)) as resp:
-            data = await resp.json()
-            return (data.get("result") or {}).get("username", "")
-    except Exception as exc:
-        log.warning("取得 Bot 資訊失敗：%s", exc)
-        return ""
+# ─── Telegram getUpdates ─────────────────────────────────────────────────────
 
 def extract_question(text: str, bot_username: str, chat_type: str) -> Optional[str]:
-    """判斷這則訊息是不是要問 AI 助手的問題，是的話回傳去除 mention/指令後的問題內容。"""
+    """Determine whether the message is a question for the AI assistant; if so, return the question text without the mention or command."""
     text = (text or "").strip()
     if not text or text.startswith("/start") or text.startswith("/help"):
         return None
@@ -91,21 +81,21 @@ def extract_question(text: str, bot_username: str, chat_type: str) -> Optional[s
         question = text[len("/ask"):].strip()
         return question or None
 
-    # 私訊聊天視為直接對話，不需要 @mention
+    # Private chats are treated as direct conversations, so no @mention is required
     if chat_type == "private":
         return text
 
     return None
 
 
-# ─── 主迴圈 ─────────────────────────────────────────────────────────────────
+# ─── Main loop ─────────────────────────────────────────────────────────────────
 
 async def telegram_qa_loop(session: aiohttp.ClientSession) -> None:
     bot_username = await get_bot_username(session)
     if bot_username:
-        log.info("Telegram 問答監聽已啟動，Bot 帳號：@%s", bot_username)
+        log.info("Telegram Q&A listener started. Bot username: @%s", bot_username)
     else:
-        log.info("Telegram 問答監聽已啟動（未取得 bot username，群組中請改用 /ask 指令）")
+        log.info("Telegram Q&A listener started (bot username not available; in groups, use the /ask command)")
 
     url = f"{TELEGRAM_API}/getUpdates"
     offset: Optional[int] = None
@@ -118,12 +108,12 @@ async def telegram_qa_loop(session: aiohttp.ClientSession) -> None:
             async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=40)) as resp:
                 if resp.status != 200:
                     body = await resp.text()
-                    log.warning("getUpdates 失敗：status=%s body=%s", resp.status, body[:300])
+                    log.warning("getUpdates failed: status=%s body=%s", resp.status, body[:300])
                     await asyncio.sleep(5)
                     continue
                 data = await resp.json()
         except Exception as exc:
-            log.warning("getUpdates 異常：%s", exc)
+            log.warning("getUpdates error: %s", exc)
             await asyncio.sleep(5)
             continue
 
@@ -143,21 +133,21 @@ async def telegram_qa_loop(session: aiohttp.ClientSession) -> None:
             if not question:
                 continue
 
-            log.info("收到問答請求：%s", question[:60])
+            log.info("Received Q&A request: %s", question[:60])
             if not GEMINI_API_KEY:
-                answer = "未設置 GEMINI_API_KEY，問答功能目前無法使用。"
+                answer = "GEMINI_API_KEY is not set, so the Q&A feature is currently unavailable."
             else:
-                answer = await ask_gemini_qa(session, question) or "暫時無法產生回覆，請稍後再試一次。"
+                answer = await ask_gemini_qa(session, question) or "The response could not be generated temporarily. Please try again later."
             ok = await send_telegram_message(session, chat_id, answer, reply_to=message_id)
-            log.info("問答回覆%s", "成功" if ok else "失敗")
+            log.info("Q&A response %s", "successful" if ok else "failed")
 
 
 async def main() -> None:
     if not TELEGRAM_BOT_TOKEN:
-        log.error("未設置 TELEGRAM_BOT_TOKEN，無法啟動問答服務")
+        log.error("TELEGRAM_BOT_TOKEN is not set; the Q&A service cannot start")
         return
     if not GEMINI_API_KEY:
-        log.warning("未設置 GEMINI_API_KEY，問答將永遠回覆失敗訊息")
+        log.warning("GEMINI_API_KEY is not set; Q&A will always return a failure message")
 
     async with aiohttp.ClientSession() as session:
         await telegram_qa_loop(session)
@@ -167,4 +157,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        log.info("已手動停止")
+        log.info("Stopped manually")
