@@ -36,7 +36,7 @@ async def send_telegram_message(
         log.warning("Telegram is not configured; skipping send:\n%s", text[:200])
         return False
 
-    url = f"{TELEGRAM_API}/sendMessage"
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     base_payload: dict = {
         "chat_id": chat_id,
         "text": text,
@@ -79,7 +79,8 @@ async def send_telegram_message(
 
 async def get_bot_username(session: aiohttp.ClientSession) -> str:
     try:
-        async with session.get(f"{TELEGRAM_API}/getMe", timeout=aiohttp.ClientTimeout(total=10)) as resp:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_01}/getMe"
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
             data = await resp.json()
             return (data.get("result") or {}).get("username", "")
     except Exception as exc:
