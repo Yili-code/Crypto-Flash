@@ -22,11 +22,11 @@ Runs 24/7 via GitHub Actions, and works fine in both groups and DMs.
 <table>
 <tr>
 <td align="center" width="33%">
-<img src="assets/demo001.jpg" width="100%"><br>
+<img src="../assets/demo001.jpg" width="100%"><br>
 <sub><b>Tiered Push Notifications</b><br>Gemini ranks each news item by importance</sub>
 </td>
 <td align="center" width="33%">
-<img src="assets/demo002.jpg" width="100%"><br>
+<img src="../assets/demo002.jpg" width="100%"><br>
 <sub><b>AI Real-time Q&A</b><br>Combines pushed news history with its own reasoning</sub>
 </td>
 </tr>

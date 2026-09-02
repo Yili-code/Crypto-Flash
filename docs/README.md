@@ -22,11 +22,11 @@ Github Action 24/7 自動化運行，可在群組與私訊正常運作
 <table>
 <tr>
 <td align="center" width="33%">
-<img src="assets/demo001.jpg" width="100%"><br>
+<img src="../assets/demo001.jpg" width="100%"><br>
 <sub><b>分級推播</b><br>Gemini 會根據新聞進行分級</sub>
 </td>
 <td align="center" width="33%">
-<img src="assets/demo002.jpg" width="100%"><br>
+<img src="../assets/demo002.jpg" width="100%"><br>
 <sub><b>AI 即時回覆</b><br>發送過的新聞 x 自身推理能力</sub>
 </td>
 </tr>
