@@ -26,11 +26,13 @@ async def send_telegram_message(
     session: aiohttp.ClientSession,
     chat_id: str,
     text: str,
+    bot_token: Optional[str] = None,
     *,
     reply_to: Optional[int] = None,
     max_attempts: int = 3,
 ) -> bool:
-    if not TELEGRAM_BOT_TOKEN_01 or not chat_id:
+    token = bot_token or TELEGRAM_BOT_TOKEN_01
+    if not token or not chat_id:
         log.warning("Telegram is not configured; skipping send:\n%s", text[:200])
         return False
 

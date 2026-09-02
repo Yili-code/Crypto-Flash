@@ -382,7 +382,7 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
         summary = title or content
 
     msg = format_message(summary, tier=tier)
-    ok = await send_telegram_message(session, TELEGRAM_CHAT_ID, msg)
+    ok = await send_telegram_message(session, TELEGRAM_CHAT_ID, msg, TELEGRAM_BOT_TOKEN_01)
     log.info("Telegram send %s", "successful" if ok else "failed")
 
 
