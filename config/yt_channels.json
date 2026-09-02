@@ -1,0 +1,8 @@
+[
+{
+  "name": "加密龐克",
+  "channel_id": "UCeeeGbipVKpz23A8_c3I3uA",
+  "system_prompt": "以 JARVIS 的口吻說明",
+  "max_new_per_run": 3
+}
+]

@@ -17,6 +17,7 @@ __pycache__/
 # Scraped Data / Local Outputs
 data/
 *.json
+!config/*.json
 *.csv
 *.sqlite3
 
