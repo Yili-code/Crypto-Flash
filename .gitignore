@@ -18,6 +18,9 @@ __pycache__/
 data/
 *.json
 !config/*.json
+!data/
+!data/recent_news.json
+!data/yt_seen_ids.json
 *.csv
 *.sqlite3
 
