@@ -1,6 +1,6 @@
 ﻿<div align="center">
 
-# Jin10 News Scraper
+# Crypto Flash
 
 **免費 x 持續運行中**
 
