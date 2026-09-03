@@ -9,6 +9,10 @@ concurrency:
   group: telegram-qa
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  actions: write   # needed to delete old cache entries in the cleanup step below
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -35,7 +39,6 @@ jobs:
           key: recent-news-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             recent-news-${{ runner.os }}-
-            recent-news-
 
       - name: Run Telegram Assistant
         env:
@@ -44,6 +47,18 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
         run: python src/telegram_assistant.py
+
+      - name: Delete previous cache entries
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh extension install actions/gh-actions-cache --pin v1.0.2 || true
+          set +e
+          for key in $(gh actions-cache list -R "${{ github.repository }}" --prefix "recent-news-" | cut -f 1); do
+            gh actions-cache delete "$key" -R "${{ github.repository }}" --confirm
+          done
+          exit 0
 
       - name: Save recent news context
         if: always()
