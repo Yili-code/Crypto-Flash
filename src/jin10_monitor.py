@@ -362,10 +362,10 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
     if GEMINI_API_KEY and GEMINI_AVAILABLE:
         result = await summarize_with_gemini(session, full_text)
         if result is None:
-            # Gemini failed; skip tier filtering and send the original title/content as a fallback
-            log.warning("Gemini tiering failed; broadcasting original content directly: %s", (title or content)[:60])
+            # Gemini failed; skip this item entirely instead of broadcasting raw content
+            log.warning("Gemini tiering failed; skipping push: %s", (title or content)[:60])
             remember_news(title, content, None)
-            summary = title or content
+            return
         else:
             tier = result["tier"]
             remember_news(title, content, tier)
