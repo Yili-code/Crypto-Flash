@@ -44,6 +44,7 @@ This is a GitHub Actions-driven automation project for tracking and filtering Ji
 - Sends relevant items to Gemini for grading and summary
 - Pushes important updates to Telegram
 - Adds a Telegram Q&A mode with recent context memory
+- Monitors YouTube channel RSS feeds, summarizes new videos into five key points, and pushes them to Telegram
 
 ---
 
@@ -52,10 +53,11 @@ This is a GitHub Actions-driven automation project for tracking and filtering Ji
 - WebSocket monitor with auto-reconnect: `src/jin10_monitor.py`
 - Keyword filtering with built-in defaults and optional `KEYWORDS_FILE`
 - Gemini grading and summary logic: `src/gemini.py`
-- Telegram push messaging: `src/tg01.py`
+- Telegram push messaging: `src/tg.py`
 - Telegram Q&A listener: `src/telegram_assistant.py`
+- YouTube video monitoring and summaries: `src/yt_monitor.py`
 - Shared recent-news context: `data/recent_news.json`
-- Scheduled execution via GitHub Actions every 6 hours
+- Scheduled execution via GitHub Actions: Jin10 every 6 hours and YouTube every 30 minutes
 
 ---
 
@@ -79,6 +81,39 @@ telegram_assistant.py answers questions using recent context
 
 `jin10_monitor.py` and `telegram_assistant.py` run as separate processes and share the same `recent_news.json` file for context.
 
+### YouTube video monitor
+
+`yt_monitor.py` reads the channels in `config/yt_channels.json`, checks their YouTube RSS feeds for new videos, and processes them in order:
+
+```text
+YouTube RSS
+   ↓
+Parse videos by channel_id
+   ↓
+Deduplicate with data/yt_seen_ids.json
+   ↓
+Gemini watches the video and writes five key points
+   ↓
+Push the summary and source link to Telegram
+```
+
+The first run for each channel only warms up `data/yt_seen_ids.json` with the videos already in the RSS feed; it does not send notifications for existing videos. Later runs process at most `max_new_per_run` new videos per channel. Older videos beyond that limit are marked as seen without being pushed. If Gemini summarization fails, the monitor still sends the video link.
+
+Example channel configuration:
+
+```json
+[
+  {
+    "name": "Crypto Punk",
+    "channel_id": "UCeeeGbipVKpz23A8_c3I3uA",
+    "system_prompt": "以 JARVIS 的口吻說明",
+    "max_new_per_run": 3
+  }
+]
+```
+
+`name` must be unique, and `channel_id` is the YouTube channel ID. `system_prompt` is optional and can customize the summary style for a channel. When running on GitHub Actions, make sure `data/yt_seen_ids.json` persists between runs so deduplication continues to work.
+
 ---
 
 ## Quick start
@@ -96,6 +131,7 @@ Copy `.env.example` to `.env` and fill in the values:
 
 ```env
 TELEGRAM_BOT_TOKEN_01=""
+TELEGRAM_BOT_TOKEN_02=""
 TELEGRAM_CHAT_ID=""
 GEMINI_API_KEY=""
 GEMINI_MODEL="gemini-3.5-flash-lite"
@@ -121,6 +157,14 @@ python src/telegram_assistant.py
 
 In a Telegram group, you can mention the bot or use `/ask`; in private chat, you can send a question directly.
 
+### 6. Run the YouTube monitor (optional)
+
+```bash
+python src/yt_monitor.py
+```
+
+Before running it, add the channels to `config/yt_channels.json`. The script processes all configured channels once and then exits, so it is intended to be used with a scheduler or GitHub Actions.
+
 ---
 
 ## GitHub Actions deployment
@@ -131,6 +175,7 @@ This project includes two workflows:
 |---|---|
 | `flash_monitor.yml` | Runs `src/jin10_monitor.py` on a schedule and pushes filtered news |
 | `telegram_assistant.yml` | Runs `src/telegram_assistant.py` to answer Telegram questions |
+| `yt_monitor.yml` | Runs `src/yt_monitor.py` to monitor YouTube videos and push summaries |
 
 Set these in GitHub `Settings → Secrets and variables → Actions`:
 
@@ -138,10 +183,11 @@ Set these in GitHub `Settings → Secrets and variables → Actions`:
 |---|---|
 | `GEMINI_API_KEY` | Gemini API key |
 | `TELEGRAM_BOT_TOKEN_01` | Telegram bot token |
+| `TELEGRAM_BOT_TOKEN_02` | Telegram bot token used by the YouTube monitor |
 | `TELEGRAM_CHAT_ID` | Target chat ID for pushes |
 | `GEMINI_MODEL` | Optional; defaults to `gemini-3.5-flash-lite` |
 
-The monitor workflow runs every 6 hours and also supports manual `workflow_dispatch`.
+The Jin10 monitor workflow runs every 6 hours. `yt_monitor.yml` runs at minute 0 and minute 30 of every hour. Both workflows support manual `workflow_dispatch`.
 
 ---
 
@@ -174,6 +220,16 @@ The monitor workflow runs every 6 hours and also supports manual `workflow_dispa
 | Variable | Default | Purpose |
 |---|---|---|
 | `CONTEXT_SNIPPET_LIMIT` | `40` | Number of recent items included in the answer prompt |
+
+### YouTube monitor settings
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN_02` | empty | Telegram bot token used for YouTube summary pushes |
+| `YT_CHANNELS_CONFIG` | `config/yt_channels.json` | Path to the YouTube channel configuration |
+| `YT_MAX_NEW_PER_RUN` | `3` | Maximum new videos per run when a channel does not set its own limit |
+| `YT_SEEN_STATE_FILE` | `data/yt_seen_ids.json` | Path to the processed-video state file |
+| `YT_MAX_SEEN_IDS` | `300` | Maximum processed video IDs retained per channel |
 
 ---
 

@@ -44,6 +44,7 @@
 - 將符合條件的新聞交給 Gemini 做分級、摘要與風險判斷
 - 把重要內容即時推到 Telegram
 - 另外支援 Telegram 問答模式，帶入近期快訊背景回答
+- 監控 YouTube 頻道 RSS，新影片交給 Gemini 整理 5 個重點後推播到 Telegram
 
 ---
 
@@ -52,10 +53,11 @@
 - WebSocket 連線與自動重連：`src/jin10_monitor.py`
 - 關鍵字過濾：支援內建關鍵字清單，也可用 `KEYWORDS_FILE` 自訂
 - Gemini 分級與摘要：`src/gemini.py`
-- Telegram 推播：`src/tg01.py`
+- Telegram 推播：`src/tg.py`
 - Telegram 對話問答：`src/telegram_assistant.py`
+- YouTube 新影片監控與摘要：`src/yt_monitor.py`
 - 共享近期新聞上下文：`data/recent_news.json`
-- GitHub Actions 自動執行：每 6 小時排程一次，支援手動觸發
+- GitHub Actions 自動執行：Jin10 每 6 小時一次，YouTube 每 30 分鐘一次，皆支援手動觸發
 
 ---
 
@@ -79,6 +81,39 @@ telegram_assistant.py 依背景資料回答 Telegram 問題
 
 `jin10_monitor.py` 和 `telegram_assistant.py` 是兩個獨立流程，共同使用 `recent_news.json` 作為近期快訊上下文。
 
+### YouTube 影片監控
+
+`yt_monitor.py` 會讀取 `config/yt_channels.json` 中的頻道，透過 YouTube RSS 找出新影片，再依序執行以下流程：
+
+```text
+YouTube RSS
+   ↓
+依 channel_id 解析影片
+   ↓
+比對 data/yt_seen_ids.json 去重
+   ↓
+Gemini 觀看影片並整理 5 個重點
+   ↓
+Telegram 推播摘要與來源連結
+```
+
+首次執行某個頻道時，程式只會把 RSS 中現有影片寫入 `data/yt_seen_ids.json` 作為預熱，不會推播既有影片。之後每次執行最多處理該頻道 `max_new_per_run` 部新影片；超過上限的較舊影片會標記為已讀但不推播。即使 Gemini 摘要失敗，仍會推送影片連結。
+
+頻道設定範例：
+
+```json
+[
+  {
+    "name": "加密龐克",
+    "channel_id": "UCeeeGbipVKpz23A8_c3I3uA",
+    "system_prompt": "以 JARVIS 的口吻說明",
+    "max_new_per_run": 3
+  }
+]
+```
+
+`name` 必須唯一，`channel_id` 是 YouTube 頻道 ID；`system_prompt` 可選，用來補充該頻道的摘要風格。若要在 GitHub Actions 中持續去重，必須讓 `data/yt_seen_ids.json` 在不同執行之間持久化。
+
 ---
 
 ## 快速開始
@@ -96,6 +131,7 @@ cd jin10_news_scraper
 
 ```env
 TELEGRAM_BOT_TOKEN_01=""
+TELEGRAM_BOT_TOKEN_02=""
 TELEGRAM_CHAT_ID=""
 GEMINI_API_KEY=""
 GEMINI_MODEL="gemini-3.5-flash-lite"
@@ -121,6 +157,14 @@ python src/telegram_assistant.py
 
 在群組中可直接 @ 機器人或使用 `/ask`；私人聊天則可直接輸入問題。
 
+### 6. 啟動 YouTube 監控（可選）
+
+```bash
+python src/yt_monitor.py
+```
+
+執行前請先在 `config/yt_channels.json` 填入要監控的頻道。這個腳本跑完目前設定的所有頻道後就會結束，適合搭配排程工具或 GitHub Actions 使用。
+
 ---
 
 ## GitHub Actions 部署
@@ -131,6 +175,7 @@ python src/telegram_assistant.py
 |---|---|
 | `flash_monitor.yml` | 執行 `src/jin10_monitor.py`，監控快訊並推播 |
 | `telegram_assistant.yml` | 執行 `src/telegram_assistant.py`，接收 Telegram 問題並回答 |
+| `yt_monitor.yml` | 執行 `src/yt_monitor.py`，監控 YouTube 新影片並推播摘要 |
 
 在 GitHub 的 `Settings → Secrets and variables → Actions` 中新增：
 
@@ -138,10 +183,11 @@ python src/telegram_assistant.py
 |---|---|
 | `GEMINI_API_KEY` | Google AI Studio 的 Gemini API 金鑰 |
 | `TELEGRAM_BOT_TOKEN_01` | Telegram Bot Token |
+| `TELEGRAM_BOT_TOKEN_02` | YouTube 監控使用的 Telegram Bot Token |
 | `TELEGRAM_CHAT_ID` | 推播目標聊天室或群組 ID |
 | `GEMINI_MODEL` | 可選，預設為 `gemini-3.5-flash-lite` |
 
-`flash_monitor.yml` 會在每 6 小時排程一次，也支援手動觸發 `workflow_dispatch`。
+`flash_monitor.yml` 會在每 6 小時排程一次；`yt_monitor.yml` 會在每小時的第 0 分與第 30 分執行一次。兩者都支援手動觸發 `workflow_dispatch`。
 
 ---
 
@@ -174,6 +220,16 @@ python src/telegram_assistant.py
 | 變數 | 預設值 | 用途 |
 |---|---|---|
 | `CONTEXT_SNIPPET_LIMIT` | `40` | 回答問題時帶入的背景訊息數量 |
+
+### YouTube 監控設定
+
+| 變數 | 預設值 | 用途 |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN_02` | 空 | YouTube 摘要推播使用的 Telegram Bot Token |
+| `YT_CHANNELS_CONFIG` | `config/yt_channels.json` | YouTube 頻道設定檔路徑 |
+| `YT_MAX_NEW_PER_RUN` | `3` | 頻道未指定上限時，單次最多處理的新影片數 |
+| `YT_SEEN_STATE_FILE` | `data/yt_seen_ids.json` | 已處理影片 ID 的狀態檔路徑 |
+| `YT_MAX_SEEN_IDS` | `300` | 每個頻道最多保留的已處理影片 ID 數量 |
 
 ---
 
