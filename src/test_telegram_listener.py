@@ -1,9 +1,18 @@
 import asyncio
 import os
+import sys
 from pathlib import Path
 
 import aiohttp
 from dotenv import load_dotenv
+
+# This script prints emoji status markers; a Windows console on a legacy code page
+# (cp950 for zh-TW) raises UnicodeEncodeError on the first one and aborts the check.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError, ValueError):
+        pass
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 

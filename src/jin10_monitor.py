@@ -32,6 +32,11 @@ WS_URLS = [url.strip() for url in os.getenv("WS_URLS", "wss://wss-flash-2.jin10.
 WS_RECONNECT_DELAY = float(os.getenv("WS_RECONNECT_DELAY", "5"))
 WS_IDLE_TIMEOUT = int(os.getenv("WS_IDLE_TIMEOUT", "180"))
 
+# Flash items are handed to a worker task instead of being processed inline, so a slow
+# Gemini call or a Telegram 429 backoff can never stall ws.recv() long enough for the
+# server to drop the connection.
+OUTBOX_MAXSIZE = int(os.getenv("OUTBOX_MAXSIZE", "200"))
+
 UA_POOL = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -386,7 +391,36 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
     log.info("Telegram send %s", "successful" if ok else "failed")
 
 
-async def ws_loop(session: aiohttp.ClientSession) -> None:
+def enqueue_item(outbox: "asyncio.Queue[dict]", item: dict) -> None:
+    """Never block the receive loop: if the worker is behind, drop the oldest item."""
+    try:
+        outbox.put_nowait(item)
+    except asyncio.QueueFull:
+        try:
+            dropped = outbox.get_nowait()
+            outbox.task_done()
+            log.warning("Outbox is full; dropping the oldest flash item: %s", str(dropped.get("id", ""))[:40])
+        except asyncio.QueueEmpty:
+            pass
+        try:
+            outbox.put_nowait(item)
+        except asyncio.QueueFull:
+            log.warning("Outbox is still full; dropping the incoming flash item")
+
+
+async def outbox_worker(session: aiohttp.ClientSession, outbox: "asyncio.Queue[dict]") -> None:
+    while True:
+        item = await outbox.get()
+        try:
+            await handle_item(session, item)
+        except Exception as exc:
+            log.warning("Failed to process flash item: %s: %s", type(exc).__name__, exc)
+            log.debug("Full traceback:", exc_info=True)
+        finally:
+            outbox.task_done()
+
+
+async def ws_loop(session: aiohttp.ClientSession, outbox: "asyncio.Queue[dict]") -> None:
     log.info("Attempting to establish WebSocket connection...")
     while True:
         ws_url = random.choice(WS_URLS)
@@ -421,7 +455,7 @@ async def ws_loop(session: aiohttp.ClientSession) -> None:
 
                     if code in {1000, 1100} and isinstance(data, dict):
                         if data.get("action") in {1, 2} and is_new(data):
-                            await handle_item(session, data)
+                            enqueue_item(outbox, data)
                     elif code == 1200 and isinstance(data, list):
                         # When the connection opens, a batch of historical flash news is sent; it is only used to warm the deduplication cache, not processed individually to avoid duplicate spam
                         if not skipped_initial_list:
@@ -433,7 +467,7 @@ async def ws_loop(session: aiohttp.ClientSession) -> None:
                             continue
                         for entry in data:
                             if isinstance(entry, dict) and entry.get("action") in {1, 2} and is_new(entry):
-                                await handle_item(session, entry)
+                                enqueue_item(outbox, entry)
         except asyncio.TimeoutError:
             log.warning("WebSocket received no messages for %.0fs; reconnecting", WS_IDLE_TIMEOUT)
             await asyncio.sleep(WS_RECONNECT_DELAY)
@@ -461,7 +495,16 @@ async def main() -> None:
         if not TELEGRAM_BOT_TOKEN_01 or not TELEGRAM_CHAT_ID:
             log.warning("TELEGRAM_BOT_TOKEN_01 / TELEGRAM_CHAT_ID are not set; Telegram push notifications will be skipped")
 
-        await ws_loop(session)
+        outbox: asyncio.Queue[dict] = asyncio.Queue(maxsize=OUTBOX_MAXSIZE)
+        worker = asyncio.create_task(outbox_worker(session, outbox))
+        try:
+            await ws_loop(session, outbox)
+        finally:
+            worker.cancel()
+            try:
+                await worker
+            except asyncio.CancelledError:
+                pass
 
 if __name__ == "__main__":
     try:

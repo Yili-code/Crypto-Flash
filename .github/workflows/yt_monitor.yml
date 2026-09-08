@@ -1,6 +1,6 @@
 name: YouTube monitor agent
 
-on: 
+on:
   schedule:
     - cron: "0,30 */1 * * *"
   workflow_dispatch: {}
@@ -9,6 +9,10 @@ concurrency:
   group: yt_channel_monitor
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  actions: write   # needed to prune old cache entries in the cleanup step below
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -16,15 +20,25 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: "3.12"
         cache: "pip"
-    
+
     - name: Install dependencies
       run: pip install -q -r requirements.txt
+
+    # Without this the job always starts from the copy committed in the repo, so every
+    # run rediscovers the same videos as "new" and pushes them again.
+    - name: Restore seen video ids
+      uses: actions/cache/restore@v4
+      with:
+        path: data/yt_seen_ids.json
+        key: yt-seen-${{ runner.os }}-${{ github.run_id }}
+        restore-keys: |
+          yt-seen-${{ runner.os }}-
 
     - name: Run YouTube monitor agent
       env:
@@ -33,3 +47,24 @@ jobs:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
       run: python src/yt_monitor.py
+
+    # This job runs every 30 minutes, so old entries have to be cleared or they pile
+    # up. The state file is already on disk here, so pruning before the save is safe.
+    - name: Prune old seen-id cache entries
+      if: always()
+      continue-on-error: true
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        ids=$(gh api --paginate "repos/${{ github.repository }}/actions/caches?per_page=100" \
+          --jq '.actions_caches[] | select(.key | startswith("yt-seen-")) | .id')
+        for id in $ids; do
+          gh api -X DELETE "repos/${{ github.repository }}/actions/caches/$id" || true
+        done
+
+    - name: Save seen video ids
+      if: always()
+      uses: actions/cache/save@v4
+      with:
+        path: data/yt_seen_ids.json
+        key: yt-seen-${{ runner.os }}-${{ github.run_id }}

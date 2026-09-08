@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -11,6 +12,14 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR / ".env")
+
+# Windows consoles default to a legacy code page (cp950 for zh-TW), which mangles the
+# Simplified Chinese in flash-news logs and raises UnicodeEncodeError on emoji.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError, ValueError):
+        pass
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
 
@@ -57,7 +66,16 @@ def load_recent_news() -> list[dict]:
     if not isinstance(items, list):
         return []
     now = time.time()
-    return [it for it in items if isinstance(it, dict) and now - it.get("ts", 0) <= CONTEXT_MAX_AGE_SEC]
+    fresh = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        ts = it.get("ts", 0)
+        if not isinstance(ts, (int, float)):
+            continue
+        if now - ts <= CONTEXT_MAX_AGE_SEC:
+            fresh.append(it)
+    return fresh[-CONTEXT_MAX_ITEMS:]
 
 
 def save_recent_news(items: list[dict]) -> None:

@@ -10,7 +10,7 @@ import aiohttp
 
 from common import BASE_DIR, get_logger
 from gemini import GEMINI_API_KEY, call_gemini
-from tg import TELEGRAM_BOT_TOKEN_02, TELEGRAM_CHAT_ID, send_telegram_message
+from tg import TELEGRAM_BOT_TOKEN_02, TELEGRAM_CHAT_ID, check_chat_access, send_telegram_message
 
 log = get_logger("yt-monitor")
 
@@ -95,7 +95,7 @@ def load_channel_configs() -> list[dict]:
             "name": name,
             "channel_id": channel_id,
             "system_prompt": str(item.get("system_prompt", "") or "").strip(),
-            "max_new_per_run": int(item.get("max_new_per_run") or DEFAULT_MAX_NEW_PER_RUN),
+            "max_new_per_run": max(1, int(item.get("max_new_per_run") or DEFAULT_MAX_NEW_PER_RUN)),
         })
     return configs
 
@@ -190,10 +190,14 @@ async def summarize_video(
 # ─── 訊息組裝 ───────────────────────────────────────────────────────────────
 
 def format_message(channel_title: str, title: str, link: str, summary: Optional[str]) -> str:
+    # Only the Gemini summary may contain HTML; the title and channel name are raw text
+    # and must be escaped, or an "&" / "<" in them makes Telegram reject the message.
+    safe_title = html_escape(title, quote=False)
+    safe_channel = html_escape(channel_title, quote=False)
     if summary:
-        return f"「{title}」\n#{channel_title}\n\n{summary}\n\n<b>Source</b> {link}"
+        return f"「{safe_title}」\n#{safe_channel}\n\n{summary}\n\n<b>Source</b> {link}"
     return (
-        f"<b>新影片</b>：{html_escape(title, quote=False)}\n\n"
+        f"<b>新影片</b>：{safe_title}\n\n"
         f"{link}\n\n"
         "（Gemini 摘要失敗，請直接點連結觀看）"
     )
@@ -240,6 +244,8 @@ async def process_channel(session: aiohttp.ClientSession, cfg: dict, seen_state:
         log.warning("[%s] 一次偵測到 %d 部新影片，超過上限 %d，只處理最新的 %d 部，其餘標記為已讀不推播。",
                     name, len(new_entries), max_new, max_new)
         seen_ids.extend(e["video_id"] for e in skipped)
+        seen_state[name] = seen_ids
+        save_seen_state(seen_state)
         new_entries = new_entries[-max_new:]
 
     for entry in new_entries:
@@ -250,7 +256,11 @@ async def process_channel(session: aiohttp.ClientSession, cfg: dict, seen_state:
         msg = format_message(channel_title, entry["title"], entry["link"], summary)
         ok = await send_telegram_message(session, TELEGRAM_CHAT_ID, msg, TELEGRAM_BOT_TOKEN_02)
         log.info("[%s] Telegram 發送%s：%s", name, "成功" if ok else "失敗", entry["title"][:60])
-        # 每處理完一部就存一次，避免中途失敗時下次重新執行又重複推播已經發過的影片。
+        if not ok:
+            # 沒推播出去就不要標記為已讀，否則這部影片會被永久跳過；保留未讀，下次執行會重試。
+            log.warning("[%s] 推播失敗，保留為未讀：%s", name, entry["title"][:60])
+            continue
+        # 每成功推播一部就存一次，避免中途失敗時下次重新執行又重複推播已經發過的影片。
         seen_ids.append(entry["video_id"])
         seen_state[name] = seen_ids
         save_seen_state(seen_state)
@@ -268,6 +278,9 @@ async def main() -> None:
 
     seen_state = load_seen_state()
     async with aiohttp.ClientSession() as session:
+        if not await check_chat_access(session, TELEGRAM_CHAT_ID, TELEGRAM_BOT_TOKEN_02):
+            log.error("Telegram 推播目標不可用，先跳過本次執行（避免白跑 Gemini 影片摘要）。")
+            return
         for cfg in configs:
             try:
                 await process_channel(session, cfg, seen_state)
