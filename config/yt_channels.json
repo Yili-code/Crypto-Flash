@@ -4,5 +4,29 @@
   "channel_id": "UCeeeGbipVKpz23A8_c3I3uA",
   "system_prompt": "以 JARVIS 的口吻說明",
   "max_new_per_run": 3
+},
+{
+  "name": "Benjamin Cowen",
+  "channel_id": "UCRvqjQPSeaWn-uEx-w0XOIg",
+  "system_prompt": "聚焦 BTC 市場週期、BTC Dominance、ETH/BTC 與風險指標。保留影片實際提及的時間尺度、關鍵價位與論點失效條件；區分歷史數據與主持人推測，不將週期類比寫成必然預測。說明這些訊號如何幫助理解加密貨幣走勢。",
+  "max_new_per_run": 3
+},
+{
+  "name": "Glassnode",
+  "channel_id": "UCDq7GjSes-8kQn_Vcg35jfA",
+  "system_prompt": "聚焦鏈上資金流、持有者成本、已實現損益、供需與 ETF 資金。保留影片實際提供的指標數值、統計期間及限制，說明與 BTC 或 ETH 買賣壓力的關聯；區分觀察與推論，不補造數據或因果關係。",
+  "max_new_per_run": 3
+},
+{
+  "name": "Coin Bureau",
+  "channel_id": "UCqK_GSMbpiV8spgD3ZGloSw",
+  "system_prompt": "優先整理影片中與加密貨幣走勢相關的宏觀環境、Liquidity、政策監管、ETF 與市場催化事件。交代事件影響 BTC、ETH 或其他資產的傳導機制、時間尺度與不確定性；區分事實、主持人觀點與贊助推廣，不把標題或價格預測當成事實。若影片與行情無直接關聯，明確指出，不牽強連結。",
+  "max_new_per_run": 3
+},
+{
+  "name": "Bankless",
+  "channel_id": "UCAI9Ld79qaZxp9JzEOwd3aA",
+  "system_prompt": "聚焦 ETH、DeFi、機構採用、資金輪動與 Tokenomics。說明影片提及的事件如何影響需求、供給、協議收入或代幣價值捕獲；區分已發生事實、來賓立場與市場敘事，標示影片提及的利益關係，不將產品宣傳當成投資結論。若與行情無直接關聯，明確指出，不牽強連結。",
+  "max_new_per_run": 3
 }
 ]
