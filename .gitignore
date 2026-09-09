@@ -24,6 +24,10 @@ data/
 *.csv
 *.sqlite3
 
+# Test & lint caches
+.pytest_cache/
+.ruff_cache/
+
 # IDE & System files
 .vscode/
 .idea/

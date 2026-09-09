@@ -21,7 +21,7 @@ from common import (
     get_logger,
     save_recent_news,
 )
-from gemini import GEMINI_API_KEY, call_gemini, test_gemini_connection, mask_key
+from gemini import GEMINI_API_KEY, call_gemini, test_gemini_connection
 from tg import TELEGRAM_BOT_TOKEN_01, TELEGRAM_CHAT_ID, send_telegram_message
 
 log = get_logger("jin10")
@@ -36,6 +36,7 @@ WS_IDLE_TIMEOUT = int(os.getenv("WS_IDLE_TIMEOUT", "180"))
 # Gemini call or a Telegram 429 backoff can never stall ws.recv() long enough for the
 # server to drop the connection.
 OUTBOX_MAXSIZE = int(os.getenv("OUTBOX_MAXSIZE", "200"))
+GEMINI_RECONNECT_DELAY = max(1.0, float(os.getenv("GEMINI_RECONNECT_DELAY", "30")))
 
 UA_POOL = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -311,6 +312,9 @@ async def summarize_with_gemini(session: aiohttp.ClientSession, text: str) -> Op
     except json.JSONDecodeError:
         log.warning("Gemini returned invalid JSON: %s", raw_text[:300])
         return None
+    if not isinstance(result, dict):
+        log.warning("Gemini returned a non-object summary")
+        return None
     tier = str(result.get("tier") or "").strip().upper()
     if tier not in TIER_RANK:
         tier = None
@@ -325,9 +329,27 @@ async def summarize_with_gemini(session: aiohttp.ClientSession, text: str) -> Op
 
 recent_news: deque[dict] = deque(maxlen=CONTEXT_MAX_ITEMS)
 
-# Set once at startup by test_gemini_connection(); when False, handle_item() skips
-# calling Gemini on every item instead of retrying (and failing) per-message.
+# Recovery checks run separately from the WebSocket receiver and outbox worker.
 GEMINI_AVAILABLE = False
+
+
+async def gemini_recovery_loop(session: aiohttp.ClientSession) -> None:
+    global GEMINI_AVAILABLE
+    if not GEMINI_API_KEY:
+        log.error("GEMINI_API_KEY is not set; flash pushes are paused")
+        return
+    while True:
+        if not GEMINI_AVAILABLE:
+            try:
+                GEMINI_AVAILABLE = await test_gemini_connection(session)
+            except Exception as exc:
+                log.warning("Gemini recovery check failed: %s", exc)
+                GEMINI_AVAILABLE = False
+            if GEMINI_AVAILABLE:
+                log.info("Gemini is available; summarized flash pushes resumed")
+            else:
+                log.warning("Gemini unavailable; flash pushes paused, retrying in %ss", GEMINI_RECONNECT_DELAY)
+        await asyncio.sleep(GEMINI_RECONNECT_DELAY)
 
 def remember_news(title: str, content: str, tier: Optional[str]) -> None:
     now = time.time()
@@ -353,6 +375,7 @@ def format_message(summary: str, tier: Optional[str] = None) -> str:
 # ─── Main flow ────────────────────────────────────────────────────────────────
 
 async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
+    global GEMINI_AVAILABLE
     title, content = item_text(item)
     full_text = f"{title} {content}".strip()
     if not full_text:
@@ -367,6 +390,7 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
     if GEMINI_API_KEY and GEMINI_AVAILABLE:
         result = await summarize_with_gemini(session, full_text)
         if result is None:
+            GEMINI_AVAILABLE = False
             # Gemini failed; skip this item entirely instead of broadcasting raw content
             log.warning("Gemini tiering failed; skipping push: %s", (title or content)[:60])
             remember_news(title, content, None)
@@ -384,7 +408,8 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
             summary = result["message"]
     else:
         remember_news(title, content, None)
-        summary = title or content
+        log.info("Gemini unavailable; retaining context without pushing raw news")
+        return
 
     msg = format_message(summary, tier=tier)
     ok = await send_telegram_message(session, TELEGRAM_CHAT_ID, msg, TELEGRAM_BOT_TOKEN_01)
@@ -481,30 +506,22 @@ async def ws_loop(session: aiohttp.ClientSession, outbox: "asyncio.Queue[dict]")
 
 
 async def main() -> None:
-    print()
-    # print(f"GEMINI_API_KEY : {mask_key(GEMINI_API_KEY)}")
-    # print(f"TELEGRAM_BOT_TOKEN_01 : {mask_key(TELEGRAM_BOT_TOKEN_01)}")
-    # print(f"TELEGRAM_CHAT_ID : {mask_key(TELEGRAM_CHAT_ID)}")
-    # print()
     global GEMINI_AVAILABLE
     async with aiohttp.ClientSession() as session:
-        GEMINI_AVAILABLE = await test_gemini_connection(session)
-        if not GEMINI_AVAILABLE:
-            log.warning("Gemini validation failed; subsequent flash updates will skip the summary step.")
+        GEMINI_AVAILABLE = False
 
         if not TELEGRAM_BOT_TOKEN_01 or not TELEGRAM_CHAT_ID:
             log.warning("TELEGRAM_BOT_TOKEN_01 / TELEGRAM_CHAT_ID are not set; Telegram push notifications will be skipped")
 
         outbox: asyncio.Queue[dict] = asyncio.Queue(maxsize=OUTBOX_MAXSIZE)
         worker = asyncio.create_task(outbox_worker(session, outbox))
+        recovery = asyncio.create_task(gemini_recovery_loop(session))
         try:
             await ws_loop(session, outbox)
         finally:
             worker.cancel()
-            try:
-                await worker
-            except asyncio.CancelledError:
-                pass
+            recovery.cancel()
+            await asyncio.gather(worker, recovery, return_exceptions=True)
 
 if __name__ == "__main__":
     try:

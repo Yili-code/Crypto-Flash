@@ -1,0 +1,60 @@
+name: Persist state files
+description: >
+  Commit generated state files back into the repository. GitHub Actions cache was
+  previously used for this, but it is evicted after 7 days, matches by key prefix
+  (which silently returned the wrong entry) and cannot be inspected. The repository
+  is durable, visible in history, and needs no extra secrets.
+
+inputs:
+  paths:
+    description: Space-separated list of files to commit.
+    required: true
+  message:
+    description: Commit message to use when something changed.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PATHS: ${{ inputs.paths }}
+        MESSAGE: ${{ inputs.message }}
+        BRANCH: ${{ github.ref_name }}
+      run: |
+        set -euo pipefail
+
+        git config user.name  "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        # Every state file has exactly one writing workflow, so on a push race our copy
+        # is authoritative: keep it aside and replay it on whatever tip won the race.
+        stash=$(mktemp -d)
+        for f in $PATHS; do
+          [ -f "$f" ] || continue
+          mkdir -p "$stash/$(dirname "$f")"
+          cp "$f" "$stash/$f"
+        done
+
+        for attempt in 1 2 3; do
+          git add -A -- $PATHS
+          if git diff --cached --quiet; then
+            echo "No state change to persist."
+            exit 0
+          fi
+          git commit -q -m "$MESSAGE"
+          if git push -q origin "HEAD:$BRANCH"; then
+            echo "Persisted $PATHS on attempt $attempt."
+            exit 0
+          fi
+          echo "Push rejected (attempt $attempt); replaying on the current tip."
+          git fetch -q origin "$BRANCH"
+          git reset -q --hard FETCH_HEAD
+          for f in $PATHS; do
+            [ -f "$stash/$f" ] || continue
+            mkdir -p "$(dirname "$f")"
+            cp "$stash/$f" "$f"
+          done
+        done
+
+        echo "::warning::Could not persist $PATHS after 3 attempts; the next run will start from the committed state."

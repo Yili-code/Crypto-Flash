@@ -10,8 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
-  actions: write   # needed to prune old cache entries in the cleanup step below
+  contents: write   # the run commits data/recent_news.json back to the repository
 
 jobs:
   run-monitor:
@@ -31,47 +30,23 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          else
-            pip install aiohttp websockets python-dotenv
-          fi
-
-      - name: Restore recent news context (best-effort)
-        uses: actions/cache/restore@v4
-        with:
-          path: data/recent_news.json
-          key: recent-news-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            recent-news-${{ runner.os }}-
+          pip install -r requirements.txt
 
       - name: Run Jin10 Monitor
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GEMINI_RECONNECT_DELAY: '30'
           TELEGRAM_BOT_TOKEN_01: ${{ secrets.TELEGRAM_BOT_TOKEN_01 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          python src/jin10_monitor.py
+        run: python src/jin10_monitor.py
 
-      # This job is the only writer of data/recent_news.json, so it prunes the old
-      # entries just before writing the new one. The file is already on disk at this
-      # point, so deleting the cache it was restored from is safe.
-      - name: Prune old recent-news cache entries
+      # This job is the only writer of data/recent_news.json; telegram_assistant.yml
+      # reads it straight out of the checkout.
+      - name: Persist recent news context
         if: always()
         continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ids=$(gh api --paginate "repos/${{ github.repository }}/actions/caches?per_page=100" \
-            --jq '.actions_caches[] | select(.key | startswith("recent-news-")) | .id')
-          for id in $ids; do
-            gh api -X DELETE "repos/${{ github.repository }}/actions/caches/$id" || true
-          done
-
-      - name: Save recent news context (best-effort)
-        if: always()
-        uses: actions/cache/save@v4
+        uses: ./.github/actions/persist-state
         with:
-          path: data/recent_news.json
-          key: recent-news-${{ runner.os }}-${{ github.run_id }}
+          paths: data/recent_news.json
+          message: "chore(state): update recent news context [skip ci]"

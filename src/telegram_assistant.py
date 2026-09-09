@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import time
 from typing import Optional
 
@@ -67,19 +68,24 @@ async def ask_gemini_qa(session: aiohttp.ClientSession, question: str) -> Option
 def extract_question(text: str, bot_username: str, chat_type: str) -> Optional[str]:
     """Determine whether the message is a question for the AI assistant; if so, return the question text without the mention or command."""
     text = (text or "").strip()
-    if not text or text.startswith("/start") or text.startswith("/help"):
+    if not text:
         return None
 
-    if bot_username:
-        mention = f"@{bot_username}"
-        idx = text.lower().find(mention.lower())
-        if idx != -1:
-            question = (text[:idx] + text[idx + len(mention):]).strip()
-            return question or None
+    # Resolve commands before mentions so /ask@bot never leaks /ask into the prompt.
+    command = re.match(r"^/([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?(?=\s|$)", text)
+    if command:
+        name, recipient = command.groups()
+        if recipient and recipient.lower() != bot_username.lower():
+            return None
+        if name != "ask":
+            return None
+        return text[command.end():].strip() or None
 
-    if text.startswith("/ask"):
-        question = text[len("/ask"):].strip()
-        return question or None
+    if bot_username:
+        mention = re.search(rf"(?<!\w)@{re.escape(bot_username)}(?![A-Za-z0-9_])", text, re.IGNORECASE)
+        if mention:
+            question = (text[:mention.start()] + text[mention.end():]).strip()
+            return question or None
 
     # Private chats are treated as direct conversations, so no @mention is required
     if chat_type == "private":

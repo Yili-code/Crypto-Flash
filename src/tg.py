@@ -24,7 +24,8 @@ MAX_RETRY_AFTER = float(os.getenv("TELEGRAM_MAX_RETRY_AFTER", "30"))
 
 log = get_logger("telegram")
 
-_send_lock = asyncio.Lock()
+_send_lock: Optional[asyncio.Lock] = None
+_send_lock_loop = None
 _last_send_at = 0.0
 
 
@@ -34,10 +35,21 @@ def _strip_html_tags(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text)
 
 
+def _get_send_lock() -> asyncio.Lock:
+    """An asyncio.Lock binds to the loop that first uses it, so rebuild it whenever the
+    caller is on a different loop (each entrypoint runs its own asyncio.run)."""
+    global _send_lock, _send_lock_loop
+    loop = asyncio.get_running_loop()
+    if _send_lock is None or _send_lock_loop is not loop:
+        _send_lock = asyncio.Lock()
+        _send_lock_loop = loop
+    return _send_lock
+
+
 async def _throttle() -> None:
     """Serialize sends and keep at least SEND_MIN_INTERVAL between them."""
     global _last_send_at
-    async with _send_lock:
+    async with _get_send_lock():
         wait = SEND_MIN_INTERVAL - (time.monotonic() - _last_send_at)
         if wait > 0:
             await asyncio.sleep(wait)
@@ -53,7 +65,7 @@ async def send_telegram_message(
     reply_to: Optional[int] = None,
     max_attempts: int = 3,
 ) -> bool:
-    token = bot_token or TELEGRAM_BOT_TOKEN_01
+    token = TELEGRAM_BOT_TOKEN_01 if bot_token is None else bot_token
     if not token or not chat_id:
         log.warning("Telegram is not configured; skipping send:\n%s", text[:200])
         return False
@@ -107,7 +119,7 @@ async def check_chat_access(
 ) -> bool:
     """Pre-flight getChat so a misconfigured chat id fails loudly up front, instead of
     after every expensive summarisation has already been paid for."""
-    token = bot_token or TELEGRAM_BOT_TOKEN_01
+    token = TELEGRAM_BOT_TOKEN_01 if bot_token is None else bot_token
     if not token or not chat_id:
         log.error("Telegram is not configured (missing bot token or chat id)")
         return False

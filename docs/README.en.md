@@ -112,7 +112,7 @@ Example channel configuration:
 ]
 ```
 
-`name` must be unique, and `channel_id` is the YouTube channel ID. `system_prompt` is optional and can customize the summary style for a channel. When running on GitHub Actions, make sure `data/yt_seen_ids.json` persists between runs so deduplication continues to work.
+`name` must be unique, and `channel_id` is the YouTube channel ID. `system_prompt` is optional and can customize the summary style for a channel. Deduplication state lives in `data/yt_seen_ids.json`; on GitHub Actions the workflow commits it back to the repository automatically (see "State persistence" below).
 
 ---
 
@@ -169,13 +169,14 @@ Before running it, add the channels to `config/yt_channels.json`. The script pro
 
 ## GitHub Actions deployment
 
-This project includes two workflows:
+This project includes four workflows:
 
 | Workflow | Purpose |
 |---|---|
 | `flash_monitor.yml` | Runs `src/jin10_monitor.py` on a schedule and pushes filtered news |
 | `telegram_assistant.yml` | Runs `src/telegram_assistant.py` to answer Telegram questions |
 | `yt_monitor.yml` | Runs `src/yt_monitor.py` to monitor YouTube videos and push summaries |
+| `ci.yml` | Runs `ruff` and `pytest` on push / PR; uses no secrets |
 
 Set these in GitHub `Settings → Secrets and variables → Actions`:
 
@@ -189,6 +190,18 @@ Set these in GitHub `Settings → Secrets and variables → Actions`:
 
 The Jin10 monitor workflow runs every 6 hours. `yt_monitor.yml` runs at minute 0 and minute 30 of every hour. Both workflows support manual `workflow_dispatch`.
 
+### State persistence
+
+`data/recent_news.json` (recent flash-news context) and `data/yt_seen_ids.json` (already-pushed videos) have to survive between runs. Without that the Q&A bot loses its background context and the YouTube monitor re-pushes the same videos on every run.
+
+Both files are **committed back to the repository** by `.github/actions/persist-state` at the end of each run:
+
+- Each file has exactly one writing workflow, so on a push race the writer replays its own copy on top of the current tip instead of clobbering another workflow's changes.
+- Nothing is committed when the content did not change. Commit messages carry `[skip ci]`, and `ci.yml` ignores `data/**`.
+- The writing workflows need `permissions: contents: write`. If your repository is configured with a read-only `GITHUB_TOKEN`, switch `Settings → Actions → General → Workflow permissions` to **Read and write permissions**.
+
+> An earlier version kept these files in the GitHub Actions cache. Cache entries are evicted after 7 days of no use, are matched by key prefix (which silently restored the wrong entry), and cannot be inspected — hence the move to plain commits.
+
 ---
 
 ## Configurable environment variables
@@ -199,6 +212,8 @@ The Jin10 monitor workflow runs every 6 hours. `yt_monitor.yml` runs at minute 0
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN_01` | empty | Telegram Bot Token |
 | `TELEGRAM_CHAT_ID` | empty | Push target / source chat guard for Q&A |
+| `TELEGRAM_MIN_SEND_INTERVAL` | `3.5` | Minimum seconds between two pushes, to stay under Telegram's rate limit |
+| `TELEGRAM_MAX_RETRY_AFTER` | `30` | Cap on the 429 backoff (Telegram sometimes asks for several minutes) |
 | `GEMINI_API_KEY` | empty | Gemini API key |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model to use |
 | `NEWS_CONTEXT_FILE` | `data/recent_news.json` | Shared recent-news cache |
@@ -214,6 +229,10 @@ The Jin10 monitor workflow runs every 6 hours. `yt_monitor.yml` runs at minute 0
 | `WS_IDLE_TIMEOUT` | `180` | Reconnect if no traffic is seen |
 | `WS_RECONNECT_DELAY` | `5` | Delay before reconnect |
 | `CONTEXT_MAX_ITEMS` | `80` | Max recent items retained |
+| `OUTBOX_MAXSIZE` | `200` | Pending-item queue size; the oldest is dropped when full so the receive loop never blocks |
+| `GEMINI_RECONNECT_DELAY` | `30` | Background retry interval in seconds while Gemini is unavailable, clamped to at least 1 second |
+
+If the Gemini startup check or a summary request fails, flash pushes pause and a background task checks the connection every 30 seconds until it recovers. The monitor keeps receiving news and saving matching items as context, without forwarding raw text. Skipped items are not replayed after recovery. A missing API key also pauses pushes. This recovery task operates independently of the existing Jin10 WebSocket reconnect loop. An unset or blank `GEMINI_MODEL` uses the default model.
 
 ### Q&A settings
 
@@ -230,6 +249,18 @@ The Jin10 monitor workflow runs every 6 hours. `yt_monitor.yml` runs at minute 0
 | `YT_MAX_NEW_PER_RUN` | `3` | Maximum new videos per run when a channel does not set its own limit |
 | `YT_SEEN_STATE_FILE` | `data/yt_seen_ids.json` | Path to the processed-video state file |
 | `YT_MAX_SEEN_IDS` | `300` | Maximum processed video IDs retained per channel |
+
+---
+
+## Development and testing
+
+```bash
+pip install -r requirements-dev.txt
+pytest          # unit tests; never touches the network
+ruff check .    # static checks
+```
+
+The suite covers Jin10 flash parsing and the binary WebSocket protocol, the outbox back-pressure behaviour, Telegram retry and throttling logic, YouTube RSS parsing and the dedup state machine, and the Q&A question detection. No API keys are required and no network requests are made.
 
 ---
 

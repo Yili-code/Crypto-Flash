@@ -81,6 +81,8 @@ telegram_assistant.py 依背景資料回答 Telegram 問題
 
 `jin10_monitor.py` 和 `telegram_assistant.py` 是兩個獨立流程，共同使用 `recent_news.json` 作為近期快訊上下文。
 
+Gemini 啟動檢查或執行中的摘要請求失敗時，快訊監控會暫停推播並在背景每 30 秒重新檢查連線，成功後自動恢復摘要推播。中斷期間仍接收快訊並保存符合關鍵字的新聞背景，不會改推原文；這些已略過的新聞不會在恢復後補發。未設定 API key 時也會暫停推播。這項恢復機制與 Jin10 WebSocket 原有的斷線重連分開運作。
+
 ### YouTube 影片監控
 
 `yt_monitor.py` 會讀取 `config/yt_channels.json` 中的頻道，透過 YouTube RSS 找出新影片，再依序執行以下流程：
@@ -112,7 +114,7 @@ Telegram 推播摘要與來源連結
 ]
 ```
 
-`name` 必須唯一，`channel_id` 是 YouTube 頻道 ID；`system_prompt` 可選，用來補充該頻道的摘要風格。若要在 GitHub Actions 中持續去重，必須讓 `data/yt_seen_ids.json` 在不同執行之間持久化。
+`name` 必須唯一，`channel_id` 是 YouTube 頻道 ID；`system_prompt` 可選，用來補充該頻道的摘要風格。去重狀態存在 `data/yt_seen_ids.json`，在 GitHub Actions 上會由 workflow 自動 commit 回 repo（見下方「狀態持久化」）。
 
 ---
 
@@ -169,13 +171,14 @@ python src/yt_monitor.py
 
 ## GitHub Actions 部署
 
-本專案已包含兩個 workflow：
+本專案已包含四個 workflow：
 
 | Workflow | 作用 |
 |---|---|
 | `flash_monitor.yml` | 執行 `src/jin10_monitor.py`，監控快訊並推播 |
 | `telegram_assistant.yml` | 執行 `src/telegram_assistant.py`，接收 Telegram 問題並回答 |
 | `yt_monitor.yml` | 執行 `src/yt_monitor.py`，監控 YouTube 新影片並推播摘要 |
+| `ci.yml` | push / PR 時執行 `ruff` 與 `pytest`，不使用任何 secret |
 
 在 GitHub 的 `Settings → Secrets and variables → Actions` 中新增：
 
@@ -189,6 +192,18 @@ python src/yt_monitor.py
 
 `flash_monitor.yml` 會在每 6 小時排程一次；`yt_monitor.yml` 會在每小時的第 0 分與第 30 分執行一次。兩者都支援手動觸發 `workflow_dispatch`。
 
+### 狀態持久化
+
+`data/recent_news.json`（近期快訊上下文）與 `data/yt_seen_ids.json`（已推播影片）必須跨執行保留，否則問答會失去背景、YouTube 會重複推播同一批影片。
+
+這兩個檔案由 `.github/actions/persist-state` 於每次執行結束時 **commit 回 repo**：
+
+- 每個檔案只有一個 workflow 會寫入，所以遇到 push 競態時會把自己的版本重放到最新的 tip，不會覆蓋別的 workflow 的變更。
+- 內容沒變就不會產生 commit；commit 訊息帶 `[skip ci]`，`ci.yml` 也忽略 `data/**`。
+- 寫入的 workflow 需要 `permissions: contents: write`。若你的 repo 設定為唯讀的 `GITHUB_TOKEN`，請在 `Settings → Actions → General → Workflow permissions` 改為 **Read and write permissions**。
+
+> 早期版本改用 GitHub Actions cache 保存這兩個檔案。cache 會在 7 天未使用後被淘汰、以 key 前綴模糊比對（曾因此還原到錯誤的項目），而且無法檢視內容，因此改為直接 commit。
+
 ---
 
 ## 可調整環境變數
@@ -199,6 +214,8 @@ python src/yt_monitor.py
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN_01` | 空 | Telegram Bot Token |
 | `TELEGRAM_CHAT_ID` | 空 | 推播目標 / 問答來源限制 |
+| `TELEGRAM_MIN_SEND_INTERVAL` | `3.5` | 兩則推播之間的最小間隔秒數，用來避開 Telegram 的 429 限流 |
+| `TELEGRAM_MAX_RETRY_AFTER` | `30` | 收到 429 時最多等待的秒數（Telegram 有時會要求數百秒） |
 | `GEMINI_API_KEY` | 空 | Gemini API 金鑰 |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | 生成模型 |
 | `NEWS_CONTEXT_FILE` | `data/recent_news.json` | 近期快訊的共用上下文檔 |
@@ -214,6 +231,8 @@ python src/yt_monitor.py
 | `WS_IDLE_TIMEOUT` | `180` | 若長時間無訊息就重連 |
 | `WS_RECONNECT_DELAY` | `5` | 重連前等待秒數 |
 | `CONTEXT_MAX_ITEMS` | `80` | 近期訊息最多保留數量 |
+| `OUTBOX_MAXSIZE` | `200` | 待處理快訊佇列上限；滿了會丟棄最舊的一則，確保接收迴圈不被阻塞 |
+| `GEMINI_RECONNECT_DELAY` | `30` | Gemini 不可用時的背景重試間隔秒數，最小為 1 秒 |
 
 ### 問答腳本設定
 
@@ -230,6 +249,18 @@ python src/yt_monitor.py
 | `YT_MAX_NEW_PER_RUN` | `3` | 頻道未指定上限時，單次最多處理的新影片數 |
 | `YT_SEEN_STATE_FILE` | `data/yt_seen_ids.json` | 已處理影片 ID 的狀態檔路徑 |
 | `YT_MAX_SEEN_IDS` | `300` | 每個頻道最多保留的已處理影片 ID 數量 |
+
+---
+
+## 開發與測試
+
+```bash
+pip install -r requirements-dev.txt
+pytest          # 單元測試，全程不連網
+ruff check .    # 靜態檢查
+```
+
+測試涵蓋 Jin10 快訊解析與 WebSocket 二進位協定、推播佇列的背壓行為、Telegram 送出的重試與限流邏輯、YouTube RSS 解析與去重狀態機，以及問答的提問判定。測試不需要任何 API 金鑰，也不會發出任何網路請求。
 
 ---
 
