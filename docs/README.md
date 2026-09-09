@@ -2,7 +2,7 @@
 
 # Crypto Flash
 
-**免費 x 持續運行中**
+**快訊分級 · 新聞查詢 · 每日重點 · 事件追蹤**
 
 這個專案會持續監控 Jin10 的 WebSocket 快訊，當新聞命中你的關鍵字時，會交給 Gemini 進行分級與摘要，並自動推播到 Telegram。你也可以直接在 Telegram 提問，系統會把近期已監控的快訊背景一併納入回答。
 
@@ -56,6 +56,11 @@
 - Telegram 推播：`src/tg.py`
 - Telegram 對話問答：`src/telegram_assistant.py`
 - YouTube 新影片監控與摘要：`src/yt_monitor.py`
+- 新聞查詢與狀態：`src/news_commands.py`，支援 `/news`、`/search`、`/important`、`/status`
+- 每日重點：`src/daily_digest.py`，支援 `/digest` 查詢與每日 08:15（UTC+8）推播
+- 事件追蹤：`src/event_tracking.py`，支援主題訂閱、時間線與未讀進展
+- 歷史新聞保存：`src/news_archive.py`，供日報與事件追蹤共用
+- Gemini 故障後背景重試、Telegram 限流重試與有上限的快訊處理佇列
 - 共享近期新聞上下文：`data/recent_news.json`
 - GitHub Actions 自動執行：Jin10 每 6 小時一次，YouTube 每 30 分鐘一次，皆支援手動觸發
 
@@ -64,24 +69,24 @@
 ## 工作流程
 
 ```text
-Jin10 WebSocket
+Jin10 WebSocket → 解析封包 → 待處理佇列 → 關鍵字比對
    ↓
-解析二進位封包
+Gemini 可用：分級與摘要；不可用：保留未分級紀錄
    ↓
-關鍵字比對
+保存 recent_news.json（預設 6 小時 / 80 則）
+保存 news_archive.json（72 小時 / 5,000 則）
    ↓
-Gemini 分級 + 摘要
-   ↓
-Telegram 推播
-   ↓
-寫入 data/recent_news.json
-   ↓
-telegram_assistant.py 依背景資料回答 Telegram 問題
+有摘要、相關且達推播門檻 → Telegram 即時推播
+
+recent_news.json → 新聞查詢、狀態與 AI 問答背景
+news_archive.json → 每日重點、事件時間線與追蹤進展
 ```
 
 `jin10_monitor.py` 和 `telegram_assistant.py` 是兩個獨立流程，共同使用 `recent_news.json` 作為近期快訊上下文。
 
 Gemini 啟動檢查或執行中的摘要請求失敗時，快訊監控會暫停推播並在背景每 30 秒重新檢查連線，成功後自動恢復摘要推播。中斷期間仍接收快訊並保存符合關鍵字的新聞背景，不會改推原文；這些已略過的新聞不會在恢復後補發。未設定 API key 時也會暫停推播。這項恢復機制與 Jin10 WebSocket 原有的斷線重連分開運作。
+
+保存發生在推播門檻判斷與 Telegram 發送之前，因此「有紀錄」不等於「已推播」。預設 `MEDIUM` 門檻會推送 CRITICAL、HIGH、MEDIUM；LOW 或被判定不相關的新聞仍可留在資料中。佇列滿時會丟棄最舊待處理項目，這些項目不會進入保存流程。
 
 ### YouTube 影片監控
 
@@ -139,6 +144,8 @@ GEMINI_API_KEY=""
 GEMINI_MODEL="gemini-3.5-flash-lite"
 ```
 
+Bot 01 用於 Jin10 推播、新聞指令、事件追蹤、AI 問答與日報；Bot 02 只用於 YouTube。只使用新聞查詢、日報或事件追蹤時不需要 Gemini key，但必須已有保存的新聞資料。`TELEGRAM_CHAT_ID` 同時限制問答服務接受訊息的聊天室。請在專案根目錄執行下列命令，使用 Python 3.12；監控與問答需分別在兩個終端機啟動。
+
 ### 3. 安裝依賴
 
 ```bash
@@ -181,6 +188,18 @@ python src/telegram_assistant.py
 `data/daily_digest_state.json` 記錄最近成功送出的日期，同一天重新執行會跳過；發送失敗不更新狀態。若發送成功後程序中斷，或狀態無法提交，重跑仍可能重複送出，請先檢查紀錄。狀態檔損壞時會停止並回報錯誤。
 
 排程需將 workflow 合併到 GitHub 預設分支後才會啟用，GitHub 排程可能延遲。也可手動觸發 workflow，或在本機執行 `python src/daily_digest.py`，後者會實際發送昨日報告。
+
+### 如何選擇查詢方式
+
+| 需求 | 指令與資料範圍 |
+|---|---|
+| 快速掃描最新消息 | `/news`、`/search`、`/important`：預設最近 6 小時、最多保存 80 則 |
+| 查看一天的重點 | `/digest`：72 小時歷史資料中的指定日期，沿用既有摘要 |
+| 回顧特定主題 | `/timeline 詞組`：72 小時歷史資料，不需先訂閱 |
+| 接續上次閱讀 | `/track 詞組` 後使用 `/updates`：從訂閱後開始累積未讀進展 |
+| 請 AI 解釋消息 | `/ask 問題`：預設帶入最近 40 則背景的標題或內文開頭，需要 Gemini |
+
+區分這些範圍，能避免把短期搜尋沒有結果誤認成事件沒發生，也能用未讀進度減少重複閱讀。所有查詢都受已收錄資料限制，`/ask` 不會即時搜尋網路。
 
 ### 事件追蹤與後續進展
 
@@ -235,9 +254,11 @@ python src/yt_monitor.py
 
 `flash_monitor.yml` 會在每 6 小時排程一次；`yt_monitor.yml` 會在每小時的第 0 分與第 30 分執行一次。兩者都支援手動觸發 `workflow_dispatch`。
 
+`GEMINI_MODEL` 請設為 Actions **Variable**；其餘表列金鑰與聊天室設定使用 **Secrets**。其他可調環境變數若要在 Actions 生效，需加入對應 workflow 的 `env`；僅新增 repository variable 不會自動傳給程式。
+
 ### 狀態持久化
 
-`data/recent_news.json`（近期快訊上下文）與 `data/yt_seen_ids.json`（已推播影片）必須跨執行保留，否則問答會失去背景、YouTube 會重複推播同一批影片。
+`data/recent_news.json`（近期快訊上下文）與 `data/yt_seen_ids.json`（已推播影片）必須跨執行保留，否則問答會失去背景，YouTube 會重新預熱並略過當時 RSS 中的既有影片。
 
 這兩個檔案、日報的 `data/news_archive.json`、`data/daily_digest_state.json`，以及追蹤設定 `data/event_tracking.json`，由 `.github/actions/persist-state` 於每次執行結束時 **commit 回 repo**。快訊監控會在 350 分鐘後正常停止，留時間在 job 上限前保存資料：
 
@@ -306,7 +327,7 @@ pytest          # 單元測試，全程不連網
 ruff check .    # 靜態檢查
 ```
 
-測試涵蓋 Jin10 快訊解析與 WebSocket 二進位協定、推播佇列的背壓行為、Telegram 送出的重試與限流邏輯、YouTube RSS 解析與去重狀態機，以及問答的提問判定。測試不需要任何 API 金鑰，也不會發出任何網路請求。
+測試涵蓋 Jin10 快訊解析與 WebSocket 二進位協定、推播佇列的背壓行為、Telegram 送出的重試與限流邏輯、YouTube RSS 解析與去重狀態機，以及問答的提問判定。此外涵蓋新聞查詢、日報日期與摘要去重、日報送出狀態、事件追蹤的未讀進度與發送確認，以及 Gemini 故障恢復。測試不需要任何 API 金鑰，也不會發出任何網路請求。
 
 ---
 

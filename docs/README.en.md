@@ -2,7 +2,7 @@
 
 # Crypto Flash
 
-**Free x Always-on**
+**News grading · On-demand queries · Daily roundups · Event tracking**
 
 This project continuously watches the Jin10 WebSocket feed. When a news item matches your keywords, Gemini grades and summarizes it, then the result is pushed to Telegram. You can also ask questions directly in Telegram, and the bot will use recent monitored flash news as background context.
 
@@ -56,6 +56,11 @@ This is a GitHub Actions-driven automation project for tracking and filtering Ji
 - Telegram push messaging: `src/tg.py`
 - Telegram Q&A listener: `src/telegram_assistant.py`
 - YouTube video monitoring and summaries: `src/yt_monitor.py`
+- News queries and freshness: `src/news_commands.py`, with `/news`, `/search`, `/important`, and `/status`
+- Daily roundups: `src/daily_digest.py`, with `/digest` queries and scheduled delivery at 08:15 UTC+8
+- Event tracking: `src/event_tracking.py`, with subscriptions, timelines, and unread updates
+- Historical news archive: `src/news_archive.py`, shared by roundups and event tracking
+- Background Gemini recovery, Telegram rate-limit retries, and a bounded news-processing queue
 - Shared recent-news context: `data/recent_news.json`
 - Scheduled execution via GitHub Actions: Jin10 every 6 hours and YouTube every 30 minutes
 
@@ -64,22 +69,22 @@ This is a GitHub Actions-driven automation project for tracking and filtering Ji
 ## How it works
 
 ```text
-Jin10 WebSocket
+Jin10 WebSocket → Parse packets → Bounded queue → Keyword matching
    ↓
-Binary packet parsing
+Gemini available: grade and summarize; unavailable: keep ungraded record
    ↓
-Keyword matching
+Save recent_news.json (default: 6 hours / 80 records)
+Save news_archive.json (72 hours / 5,000 records)
    ↓
-Gemini tiering + summarization
-   ↓
-Telegram push
-   ↓
-Save to data/recent_news.json
-   ↓
-telegram_assistant.py answers questions using recent context
+Summary available, relevant, and above the push threshold → Telegram push
+
+recent_news.json → News queries, status, and AI Q&A context
+news_archive.json → Daily roundups, timelines, and tracked updates
 ```
 
 `jin10_monitor.py` and `telegram_assistant.py` run as separate processes and share the same `recent_news.json` file for context.
+
+Records are saved before the push threshold check and Telegram delivery, so a saved record does not prove delivery. The default `MEDIUM` threshold sends CRITICAL, HIGH, and MEDIUM; LOW or irrelevant items can still be retained. When the queue fills, the oldest pending item is dropped before processing and is not archived.
 
 ### YouTube video monitor
 
@@ -137,6 +142,8 @@ GEMINI_API_KEY=""
 GEMINI_MODEL="gemini-3.5-flash-lite"
 ```
 
+Bot 01 handles Jin10 pushes, news commands, tracking, Q&A, and daily delivery; bot 02 handles YouTube. News queries, roundups, and tracking need no Gemini key, but require saved news data. `TELEGRAM_CHAT_ID` also restricts which chat the assistant accepts. Run the commands from the project root with Python 3.12; start the monitor and assistant in separate terminals.
+
 ### 3. Install dependencies
 
 ```bash
@@ -181,6 +188,18 @@ Actions read the files available at checkout; updates in a running monitor are o
 Successful delivery records the date in `data/daily_digest_state.json`; rerunning the same day skips delivery, and failed sends do not advance state. Corrupt state stops the job. A crash or persistence failure after sending can still cause a duplicate on retry, so inspect delivery logs before rerunning a failed job.
 
 Scheduled execution requires merging the workflow into the default branch, and GitHub schedules may be delayed. Manual workflow dispatch is also available. Running `python src/daily_digest.py` locally **sends** yesterday's report.
+
+### Choosing a query
+
+| Need | Command and data scope |
+|---|---|
+| Scan recent news | `/news`, `/search`, `/important`: default six-hour context, up to 80 stored records |
+| Review a day | `/digest`: selected date within the 72-hour archive, using saved summaries |
+| Review a topic | `/timeline phrase`: 72-hour archive, no subscription required |
+| Resume reading | `/track phrase`, then `/updates`: unread developments collected after subscribing |
+| Ask for analysis | `/ask question`: defaults to 40 recent background titles or body openings; requires Gemini |
+
+These scopes help avoid mistaking an empty short-term search for an absence of events, while unread progress reduces repeated reading. All queries depend on collected data; `/ask` does not perform a live web search.
 
 ### Event tracking and follow-ups
 
@@ -235,9 +254,11 @@ Set these in GitHub `Settings → Secrets and variables → Actions`:
 
 The Jin10 monitor workflow runs every 6 hours. `yt_monitor.yml` runs at minute 0 and minute 30 of every hour. Both workflows support manual `workflow_dispatch`.
 
+Set `GEMINI_MODEL` as an Actions **Variable** and the other listed credentials/chat settings as **Secrets**. To use other environment options in Actions, add them to the relevant workflow step’s `env`; creating a repository variable alone does not pass it to the script.
+
 ### State persistence
 
-`data/recent_news.json` (recent flash-news context) and `data/yt_seen_ids.json` (already-pushed videos) have to survive between runs. Without that the Q&A bot loses its background context and the YouTube monitor re-pushes the same videos on every run.
+`data/recent_news.json` (recent flash-news context) and `data/yt_seen_ids.json` (already-pushed videos) have to survive between runs. Without them, the Q&A bot loses its context and the YouTube monitor warms up again, skipping the videos currently in the feed.
 
 These files, along with `data/news_archive.json`, `data/daily_digest_state.json`, and `data/event_tracking.json`, are **committed back to the repository** by `.github/actions/persist-state` at the end of each run:
 
@@ -308,7 +329,7 @@ pytest          # unit tests; never touches the network
 ruff check .    # static checks
 ```
 
-The suite covers Jin10 flash parsing and the binary WebSocket protocol, the outbox back-pressure behaviour, Telegram retry and throttling logic, YouTube RSS parsing and the dedup state machine, and the Q&A question detection. No API keys are required and no network requests are made.
+The suite covers Jin10 flash parsing and the binary WebSocket protocol, the outbox back-pressure behaviour, Telegram retry and throttling logic, YouTube RSS parsing and the dedup state machine, and Q&A question detection. It also covers news queries, digest dates and summary deduplication, digest delivery state, event unread progress and delivery acknowledgment, and Gemini recovery. No API keys are required and no network requests are made.
 
 ---
 
