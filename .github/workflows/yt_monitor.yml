@@ -7,7 +7,7 @@ on:
 
 concurrency:
   group: yt_channel_monitor
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write   # the run commits data/yt_seen_ids.json back to the repository
@@ -21,6 +21,9 @@ jobs:
       # videos as "new" and pushes them again.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Queued runs and reruns must read the latest persisted receipts.
+          ref: ${{ github.ref_name }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,11 +40,17 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-        run: python src/yt_monitor.py
+        # Leave five minutes for persistence even when summarization stalls.
+        run: |
+          set +e
+          timeout --signal=INT --kill-after=30s 24m python src/yt_monitor.py
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
 
       - name: Persist seen video ids
         if: always()
-        continue-on-error: true
         uses: ./.github/actions/persist-state
         with:
           paths: data/yt_seen_ids.json

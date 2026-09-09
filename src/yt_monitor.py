@@ -21,6 +21,10 @@ DEFAULT_MAX_NEW_PER_RUN = int(os.getenv("YT_MAX_NEW_PER_RUN", "3"))
 SEEN_STATE_FILE = Path(os.getenv("YT_SEEN_STATE_FILE", str(BASE_DIR / "data" / "yt_seen_ids.json")))
 MAX_SEEN_IDS_PER_CHANNEL = int(os.getenv("YT_MAX_SEEN_IDS", "300"))
 
+
+class SeenStateError(RuntimeError):
+    """Stop delivery when durable deduplication state is unavailable."""
+
 ATOM_NS = "{http://www.w3.org/2005/Atom}"
 YT_NS = "{http://www.youtube.com/xml/schemas/2015}"
 
@@ -108,10 +112,11 @@ def load_seen_state() -> dict[str, list[str]]:
     try:
         state = json.loads(SEEN_STATE_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        log.warning("讀取已處理影片清單失敗：%s", exc)
-        return {}
+        raise SeenStateError(f"讀取已處理影片清單失敗：{exc}") from exc
     if not isinstance(state, dict):
-        return {}
+        raise SeenStateError("已處理影片清單必須是物件")
+    if any(not isinstance(v, list) or any(not isinstance(i, str) for i in v) for v in state.values()):
+        raise SeenStateError("已處理影片清單包含無效資料")
     return {
         str(k): [i for i in v if isinstance(i, str)]
         for k, v in state.items() if isinstance(v, list)
@@ -126,7 +131,7 @@ def save_seen_state(state: dict[str, list[str]]) -> None:
         tmp_path.write_text(json.dumps(trimmed, ensure_ascii=False), encoding="utf-8")
         tmp_path.replace(SEEN_STATE_FILE)
     except OSError as exc:
-        log.warning("寫入已處理影片清單失敗：%s", exc)
+        raise SeenStateError(f"寫入已處理影片清單失敗：{exc}") from exc
 
 
 # ─── RSS 解析 ───────────────────────────────────────────────────────────────
@@ -232,7 +237,11 @@ async def process_channel(session: aiohttp.ClientSession, cfg: dict, seen_state:
         return
 
     seen_set = set(seen_ids)
-    new_entries = [e for e in entries if e["video_id"] not in seen_set]
+    new_entries = []
+    for entry in entries:
+        if entry["video_id"] not in seen_set:
+            new_entries.append(entry)
+            seen_set.add(entry["video_id"])
 
     if not new_entries:
         log.info("[%s] 沒有偵測到新影片。", name)
@@ -277,6 +286,8 @@ async def main() -> None:
     log.info("讀到 %d 個頻道設定：%s", len(configs), ", ".join(c["name"] for c in configs))
 
     seen_state = load_seen_state()
+    # Verify persistence before spending on summaries or delivering anything.
+    save_seen_state(seen_state)
     async with aiohttp.ClientSession() as session:
         if not await check_chat_access(session, TELEGRAM_CHAT_ID, TELEGRAM_BOT_TOKEN_02):
             log.error("Telegram 推播目標不可用，先跳過本次執行（避免白跑 Gemini 影片摘要）。")
@@ -284,6 +295,9 @@ async def main() -> None:
         for cfg in configs:
             try:
                 await process_channel(session, cfg, seen_state)
+            except SeenStateError:
+                # Continuing would deliver more videos without durable receipts.
+                raise
             except Exception as exc:
                 log.error("[%s] 處理過程發生未預期例外：%s", cfg["name"], exc)
 

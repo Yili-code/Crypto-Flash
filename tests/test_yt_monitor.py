@@ -137,16 +137,30 @@ def test_seen_state_round_trips_and_trims(tmp_path, monkeypatch):
     assert yt.load_seen_state() == {"a": ["3", "4", "5"]}
 
 
-def test_load_seen_state_ignores_corrupt_content(tmp_path, monkeypatch):
+def test_load_seen_state_rejects_corrupt_content(tmp_path, monkeypatch):
     path = tmp_path / "seen.json"
     monkeypatch.setattr(yt, "SEEN_STATE_FILE", path)
     assert yt.load_seen_state() == {}
 
     path.write_text("[]", encoding="utf-8")
-    assert yt.load_seen_state() == {}
+    with pytest.raises(yt.SeenStateError):
+        yt.load_seen_state()
 
     path.write_text('{"a": ["ok", 5], "b": "not-a-list"}', encoding="utf-8")
-    assert yt.load_seen_state() == {"a": ["ok"]}
+    with pytest.raises(yt.SeenStateError):
+        yt.load_seen_state()
+
+    path.write_text('{broken', encoding="utf-8")
+    with pytest.raises(yt.SeenStateError):
+        yt.load_seen_state()
+
+
+def test_save_failure_is_not_silently_ignored(tmp_path, monkeypatch):
+    blocker = tmp_path / "file"
+    blocker.write_text("not a directory", encoding="utf-8")
+    monkeypatch.setattr(yt, "SEEN_STATE_FILE", blocker / "seen.json")
+    with pytest.raises(yt.SeenStateError):
+        yt.save_seen_state({"c": ["older"]})
 
 
 # ─── per-channel flow ──────────────────────────────────────────────────────────
@@ -165,6 +179,52 @@ def test_a_new_video_is_pushed_and_marked_read(wired):
     asyncio.run(yt.process_channel(None, channel_cfg(), state))
     assert len(sent) == 1
     assert state["c"] == ["older", "newest"]
+
+
+def test_restart_does_not_resend_delivered_video(wired):
+    sent, _ = wired
+    asyncio.run(yt.process_channel(None, channel_cfg(), {"c": ["older"]}))
+    asyncio.run(yt.process_channel(None, channel_cfg(), yt.load_seen_state()))
+    assert len(sent) == 1
+
+
+def test_duplicate_feed_entries_are_only_sent_once(wired, monkeypatch):
+    sent, _ = wired
+    _, entries = yt.parse_feed(FEED)
+    monkeypatch.setattr(yt, "parse_feed", lambda xml: ("c", entries + entries))
+    asyncio.run(yt.process_channel(None, channel_cfg(), {"c": ["older"]}))
+    assert len(sent) == 1
+
+
+def test_main_stops_before_network_when_state_cannot_be_saved(wired, monkeypatch):
+    sent, _ = wired
+    monkeypatch.setattr(yt, "load_channel_configs", lambda: [channel_cfg()])
+
+    def fail_save(state):
+        raise yt.SeenStateError("disk unavailable")
+
+    monkeypatch.setattr(yt, "save_seen_state", fail_save)
+    with pytest.raises(yt.SeenStateError):
+        asyncio.run(yt.main())
+    assert sent == []
+
+
+def test_main_does_not_continue_after_receipt_save_failure(wired, monkeypatch):
+    monkeypatch.setattr(yt, "load_channel_configs", lambda: [channel_cfg(), channel_cfg(name="other")])
+    processed = []
+
+    async def accessible(*args):
+        return True
+
+    async def fail_process(session, cfg, state):
+        processed.append(cfg["name"])
+        raise yt.SeenStateError("disk unavailable")
+
+    monkeypatch.setattr(yt, "check_chat_access", accessible)
+    monkeypatch.setattr(yt, "process_channel", fail_process)
+    with pytest.raises(yt.SeenStateError):
+        asyncio.run(yt.main())
+    assert processed == ["c"]
 
 
 def test_a_failed_push_leaves_the_video_unread_for_the_next_run(wired):
