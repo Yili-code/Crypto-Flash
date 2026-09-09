@@ -23,6 +23,12 @@ HELP_TEXT = """<b>Crypto Flash 指令</b>
 /digest — 昨日重點，依重要性排序
 /digest today — 今日截至目前的重點
 /digest 2026-09-09 — 指定日期（限保存資料）
+/track BTC — 追蹤關鍵字的新進展
+/tracks — 追蹤清單與未讀筆數
+/timeline BTC — 最近 72 小時的事件時間線
+/updates — 只讀追蹤主題的新增進展
+/updates BTC — 只讀指定主題的新增進展
+/untrack BTC — 停止追蹤
 /ask 問題 — 交給 Gemini 分析
 /help — 顯示指令說明
 

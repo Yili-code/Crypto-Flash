@@ -23,6 +23,7 @@ data/
 !data/yt_seen_ids.json
 !data/news_archive.json
 !data/daily_digest_state.json
+!data/event_tracking.json
 *.csv
 *.sqlite3
 

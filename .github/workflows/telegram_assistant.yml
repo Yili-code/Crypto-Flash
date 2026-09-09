@@ -10,12 +10,12 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write   # persist the shared topic list and reading progress
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 360
     steps:
       # data/recent_news.json is committed by flash_monitor.yml, so the checkout
       # already carries the latest context; this job only ever reads it.
@@ -39,4 +39,18 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-        run: python src/telegram_assistant.py
+        # Leave time to save topics and reading progress before the job deadline.
+        run: |
+          set +e
+          timeout --signal=INT --kill-after=30s 350m python src/telegram_assistant.py
+          status=$?
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            exit "$status"
+          fi
+
+      - name: Persist event tracking state
+        if: always()
+        uses: ./.github/actions/persist-state
+        with:
+          paths: data/event_tracking.json
+          message: "chore(state): save event tracking progress [skip ci]"

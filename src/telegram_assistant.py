@@ -8,6 +8,7 @@ import aiohttp
 
 from common import get_logger, load_recent_news
 from gemini import GEMINI_API_KEY, call_gemini
+from event_tracking import EVENT_COMMANDS, EventReply, EventStateError, acknowledge_updates, event_command_reply
 from news_commands import local_command_reply, parse_command
 from tg import (
     TELEGRAM_API,
@@ -107,6 +108,19 @@ async def build_reply(session: aiohttp.ClientSession, text: str, bot_username: s
     return await ask_gemini_qa(session, question) or "暫時無法產生回答，請稍後重試。可先用 /news 查閱近期快訊。"
 
 
+def prepare_event_reply(text: str, bot_username: str) -> Optional[EventReply]:
+    command = parse_command(text, bot_username)
+    if not command or command[0] not in EVENT_COMMANDS:
+        return None
+    if not TELEGRAM_CHAT_ID:
+        return EventReply("請先設定 TELEGRAM_CHAT_ID，再使用聊天室共用的事件追蹤功能。")
+    try:
+        return event_command_reply(*command)
+    except EventStateError as exc:
+        log.error("Event tracking command failed: %s", exc)
+        return EventReply(str(exc))
+
+
 # ─── Main loop ─────────────────────────────────────────────────────────────────
 
 async def telegram_assistant_loop(session: aiohttp.ClientSession) -> None:
@@ -148,10 +162,16 @@ async def telegram_assistant_loop(session: aiohttp.ClientSession) -> None:
             if TELEGRAM_CHAT_ID and chat_id != str(TELEGRAM_CHAT_ID):
                 continue
 
-            answer = await build_reply(session, text, bot_username, chat_type)
+            event_reply = prepare_event_reply(text, bot_username)
+            answer = event_reply.text if event_reply else await build_reply(session, text, bot_username, chat_type)
             if answer is None:
                 continue
             ok = await send_telegram_message(session, chat_id, answer, reply_to=message_id)
+            if ok and event_reply:
+                try:
+                    acknowledge_updates(event_reply)
+                except EventStateError as exc:
+                    log.error("Event reply was sent but reading progress was not saved; updates may repeat: %s", exc)
             log.info("Q&A response %s", "successful" if ok else "failed")
 
 

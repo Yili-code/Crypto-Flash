@@ -172,7 +172,7 @@ python src/telegram_assistant.py
 | `/status` | 可查詢筆數、分級分布、最新紀錄時間 |
 | `/help`、`/start` | 顯示指令說明 |
 
-這些指令不需要 Gemini API key，群組中也可使用 `/digest@你的機器人名稱`。`/news`、`/search`、`/important` 顯示來源摘錄；`/digest` 沿用監控時已產生的 AI 摘要，依重要性彙整，不增加模型呼叫，不把未分級原文當成摘要推送。Telegram 問答服務必須正在執行，才能回覆指令。目前問答 workflow 每 6 小時啟動、最多執行 15 分鐘；若需要持續回應，可持續執行本機 `telegram_assistant.py`。每日推送是獨立 workflow，不受問答服務是否啟動影響。
+這些指令不需要 Gemini API key，群組中也可使用 `/digest@你的機器人名稱`。`/news`、`/search`、`/important` 顯示來源摘錄；`/digest` 沿用監控時已產生的 AI 摘要，依重要性彙整，不增加模型呼叫，不把未分級原文當成摘要推送。Telegram 問答服務必須正在執行，才能回覆指令。問答 workflow 與 Jin10 monitor 一樣，每 6 小時啟動、服務執行 350 分鐘後停止，留時間在 360 分鐘 job 上限前保存追蹤進度，接近全天運行。兩次執行間仍有空窗，GitHub 排程延遲也可能延長空窗，並非無縫 24/7。每日推送是獨立 workflow，不受問答服務是否啟動影響。
 
 **每日推送：** `daily_digest.yml` 設定於台灣時間 **08:15** 推送前一日 00:00–24:00 的重點，使用 `TELEGRAM_BOT_TOKEN_01` 與 `TELEGRAM_CHAT_ID`。日期按新聞收錄時間、UTC+8 計算。第一次啟用必須先讓監控累積資料；缺少資料會明確說明，並不代表當天沒有事件。日報逐則節錄既有摘要，並非新增一篇跨事件推論文章。
 
@@ -181,6 +181,25 @@ python src/telegram_assistant.py
 `data/daily_digest_state.json` 記錄最近成功送出的日期，同一天重新執行會跳過；發送失敗不更新狀態。若發送成功後程序中斷，或狀態無法提交，重跑仍可能重複送出，請先檢查紀錄。狀態檔損壞時會停止並回報錯誤。
 
 排程需將 workflow 合併到 GitHub 預設分支後才會啟用，GitHub 排程可能延遲。也可手動觸發 workflow，或在本機執行 `python src/daily_digest.py`，後者會實際發送昨日報告。
+
+### 事件追蹤與後續進展
+
+| Telegram 指令 | 用途 |
+|---|---|
+| `/track spot ETF` | 從加入時開始追蹤此完整詞組，不分大小寫 |
+| `/tracks` | 列出追蹤主題及每個主題尚未讀取的紀錄數 |
+| `/timeline spot ETF` | 回顧最近 72 小時的相關紀錄，最多顯示最新 8 則，按收錄時間排列 |
+| `/updates` | 讀取所有追蹤主題的新進展，由舊到新、每次最多 8 則 |
+| `/updates spot ETF` | 只讀取指定主題的新進展 |
+| `/untrack spot ETF` | 停止追蹤，保留原有新聞資料 |
+
+追蹤使用新聞標題、內文與既有摘要的**完整詞組比對**，不額外呼叫 Gemini，也不推測事件的因果關係。例如 `spot ETF` 不會自動匹配「現貨 ETF」；可分別加入兩個詞組。`/timeline` 不必先追蹤，也不影響未讀進度。輸出會區分摘要節錄與來源摘錄。
+
+`/updates` 是主動查詢，不會額外自動推播。只有 Telegram 確認發送成功，才更新本次實際顯示的紀錄進度；超過筆數或訊息長度上限的進展會留待下一次讀取。一次查詢中，同一紀錄命中多個主題只顯示一次；指定主題查詢只更新該主題進度。新增主題不把加入前的紀錄當成未讀，可用 `/timeline` 回顧；重複加入同一詞組不會重設進度。
+
+最多追蹤 **12 個主題**，每個詞組 **40 個字元**。設定的 `TELEGRAM_CHAT_ID` 聊天室共用一份清單與閱讀進度，聊天室內可發指令的成員都能管理它；未設定聊天室時，事件追蹤指令不開放。設定與進度保存在 `data/event_tracking.json`，由問答 workflow 單獨寫入並提交回 repository，因此也會受 repository 的可見性設定影響。本機可用 `EVENT_STATE_FILE` 指定其他保存位置。
+
+歷史資料受既有 **72 小時、5,000 則**上限限制；太久未查詢的進展可能已過期。GitHub 上只能看到 checkout 時已保存的新聞；沒有新紀錄不代表外界沒有新進展。若 Telegram 已收到訊息，但本機寫入或 GitHub 保存進度失敗，下次查詢仍可能重複出現該紀錄。
 
 ### 6. 啟動 YouTube 監控（可選）
 
@@ -220,7 +239,7 @@ python src/yt_monitor.py
 
 `data/recent_news.json`（近期快訊上下文）與 `data/yt_seen_ids.json`（已推播影片）必須跨執行保留，否則問答會失去背景、YouTube 會重複推播同一批影片。
 
-這兩個檔案，以及日報的 `data/news_archive.json`、`data/daily_digest_state.json`，由 `.github/actions/persist-state` 於每次執行結束時 **commit 回 repo**。快訊監控會在 350 分鐘後正常停止，留時間在 job 上限前保存資料：
+這兩個檔案、日報的 `data/news_archive.json`、`data/daily_digest_state.json`，以及追蹤設定 `data/event_tracking.json`，由 `.github/actions/persist-state` 於每次執行結束時 **commit 回 repo**。快訊監控會在 350 分鐘後正常停止，留時間在 job 上限前保存資料：
 
 - 每個檔案只有一個 workflow 會寫入，所以遇到 push 競態時會把自己的版本重放到最新的 tip，不會覆蓋別的 workflow 的變更。
 - 內容沒變就不會產生 commit；commit 訊息帶 `[skip ci]`，`ci.yml` 也忽略 `data/**`。
@@ -265,6 +284,7 @@ python src/yt_monitor.py
 | 變數 | 預設值 | 用途 |
 |---|---|---|
 | `CONTEXT_SNIPPET_LIMIT` | `40` | 回答問題時帶入的背景訊息數量 |
+| `EVENT_STATE_FILE` | `data/event_tracking.json` | 聊天室共用的事件追蹤清單與閱讀進度 |
 
 ### YouTube 監控設定
 

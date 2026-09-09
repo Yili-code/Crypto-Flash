@@ -172,7 +172,7 @@ In a Telegram group, you can mention the bot or use `/ask`; in private chat, you
 
 These commands work without a Gemini key and accept `/command@bot_username` in groups. The assistant must be running to answer them. News queries display source excerpts; daily roundups reuse previously generated AI summaries, with no new model calls or cross-event inference. Ungraded raw news is never substituted for a daily summary.
 
-The existing assistant workflow starts every six hours and runs for at most 15 minutes. For continuous command replies, run `telegram_assistant.py` continuously locally. Daily delivery is an independent workflow and does not require the assistant to be running.
+Like the Jin10 monitor, the assistant workflow starts every six hours and runs the service for 350 minutes, leaving time to persist tracking progress before the 360-minute job deadline. This provides near-continuous availability, with a gap between runs that scheduling delays can extend; it is not seamless 24/7 operation. Daily delivery is an independent workflow and does not require the assistant to be running.
 
 `daily_digest.yml` is scheduled for **08:15 UTC+8**, delivering the previous calendar day's roundup through bot 01. Dates use the news ingestion timestamp in UTC+8. The separate `data/news_archive.json` retains **72 hours, up to 5,000 records**; the existing six-hour Q&A context stays unchanged. First use needs time to accumulate records. Empty or partial data is identified explicitly, and observed timestamps do not imply complete coverage.
 
@@ -181,6 +181,25 @@ Actions read the files available at checkout; updates in a running monitor are o
 Successful delivery records the date in `data/daily_digest_state.json`; rerunning the same day skips delivery, and failed sends do not advance state. Corrupt state stops the job. A crash or persistence failure after sending can still cause a duplicate on retry, so inspect delivery logs before rerunning a failed job.
 
 Scheduled execution requires merging the workflow into the default branch, and GitHub schedules may be delayed. Manual workflow dispatch is also available. Running `python src/daily_digest.py` locally **sends** yesterday's report.
+
+### Event tracking and follow-ups
+
+| Command | Purpose |
+|---|---|
+| `/track spot ETF` | Track this case-insensitive phrase from the time it is added |
+| `/tracks` | List topics and unread counts |
+| `/timeline spot ETF` | Latest 8 matching records from the 72-hour archive, ordered by ingestion time |
+| `/updates` | Read new records across tracked topics, oldest first, up to 8 at a time |
+| `/updates spot ETF` | Read new records for one tracked topic |
+| `/untrack spot ETF` | Remove a subscription without deleting news |
+
+Matching uses the full phrase in titles, bodies, and saved summaries, without model calls or inferred causal links. Translations and synonyms are not expanded automatically. Timeline queries do not require a subscription or change reading progress. Output distinguishes saved summary excerpts from source excerpts.
+
+Updates are on demand, not additional automatic alerts. Reading progress advances only after Telegram confirms delivery, and only for displayed records. Overflow stays unread for the next request. A record matching multiple topics is shown once in a combined query; a topic-specific query advances only that topic. Existing records remain available through `/timeline`, but are not unread when a new subscription is created. Re-adding a phrase does not reset progress.
+
+Up to 12 topics of 40 characters each are supported. The configured `TELEGRAM_CHAT_ID` shares one topic list and progress state: members who can issue commands can manage it. Event commands are disabled without a configured chat. The assistant is the sole writer of `data/event_tracking.json` and commits it after each workflow run, so topic visibility follows repository visibility. Local installations may set `EVENT_STATE_FILE` to another path.
+
+The 72-hour/5,000-record archive and checkout snapshot still limit coverage. Old unread records can expire, and no new records does not prove there were no external developments. If a message arrives but state writing or persistence fails, a subsequent query can repeat it.
 
 ### 6. Run the YouTube monitor (optional)
 
@@ -220,7 +239,7 @@ The Jin10 monitor workflow runs every 6 hours. `yt_monitor.yml` runs at minute 0
 
 `data/recent_news.json` (recent flash-news context) and `data/yt_seen_ids.json` (already-pushed videos) have to survive between runs. Without that the Q&A bot loses its background context and the YouTube monitor re-pushes the same videos on every run.
 
-These files, along with `data/news_archive.json` and `data/daily_digest_state.json`, are **committed back to the repository** by `.github/actions/persist-state` at the end of each run:
+These files, along with `data/news_archive.json`, `data/daily_digest_state.json`, and `data/event_tracking.json`, are **committed back to the repository** by `.github/actions/persist-state` at the end of each run:
 
 - Each file has exactly one writing workflow, so on a push race the writer replays its own copy on top of the current tip instead of clobbering another workflow's changes.
 - Nothing is committed when the content did not change. Commit messages carry `[skip ci]`, and `ci.yml` ignores `data/**`.
@@ -267,6 +286,7 @@ If the Gemini startup check or a summary request fails, flash pushes pause and a
 | Variable | Default | Purpose |
 |---|---|---|
 | `CONTEXT_SNIPPET_LIMIT` | `40` | Number of recent items included in the answer prompt |
+| `EVENT_STATE_FILE` | `data/event_tracking.json` | Shared topic subscriptions and acknowledged reading progress |
 
 ### YouTube monitor settings
 
