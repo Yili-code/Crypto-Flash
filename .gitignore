@@ -21,6 +21,8 @@ data/
 !data/
 !data/recent_news.json
 !data/yt_seen_ids.json
+!data/news_archive.json
+!data/daily_digest_state.json
 *.csv
 *.sqlite3
 

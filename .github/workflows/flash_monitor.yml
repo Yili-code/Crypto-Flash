@@ -39,7 +39,14 @@ jobs:
           GEMINI_RECONNECT_DELAY: '30'
           TELEGRAM_BOT_TOKEN_01: ${{ secrets.TELEGRAM_BOT_TOKEN_01 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python src/jin10_monitor.py
+        # Stop before the job deadline so the archive persistence step can run.
+        run: |
+          set +e
+          timeout --signal=INT --kill-after=30s 350m python src/jin10_monitor.py
+          status=$?
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            exit "$status"
+          fi
 
       # This job is the only writer of data/recent_news.json; telegram_assistant.yml
       # reads it straight out of the checkout.
@@ -48,5 +55,5 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/persist-state
         with:
-          paths: data/recent_news.json
+          paths: data/recent_news.json data/news_archive.json
           message: "chore(state): update recent news context [skip ci]"

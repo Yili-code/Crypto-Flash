@@ -13,7 +13,7 @@ def monitor(monkeypatch):
     monkeypatch.setattr(jm, "GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(jm, "GEMINI_AVAILABLE", False)
     monkeypatch.setattr(jm, "KEYWORDS", ["BTC"])
-    monkeypatch.setattr(jm, "remember_news", lambda *args: None)
+    monkeypatch.setattr(jm, "remember_news", lambda *args, **kwargs: None)
     sender = AsyncMock(return_value=True)
     monkeypatch.setattr(jm, "send_telegram_message", sender)
     return sender

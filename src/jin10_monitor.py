@@ -22,6 +22,7 @@ from common import (
     save_recent_news,
 )
 from gemini import GEMINI_API_KEY, call_gemini, test_gemini_connection
+from news_archive import archive_news
 from tg import TELEGRAM_BOT_TOKEN_01, TELEGRAM_CHAT_ID, send_telegram_message
 
 log = get_logger("jin10")
@@ -351,12 +352,16 @@ async def gemini_recovery_loop(session: aiohttp.ClientSession) -> None:
                 log.warning("Gemini unavailable; flash pushes paused, retrying in %ss", GEMINI_RECONNECT_DELAY)
         await asyncio.sleep(GEMINI_RECONNECT_DELAY)
 
-def remember_news(title: str, content: str, tier: Optional[str]) -> None:
+def remember_news(
+    title: str, content: str, tier: Optional[str], *, summary: str = "", relevant: Optional[bool] = None, news_id: str = "",
+) -> None:
     now = time.time()
     recent_news.append({"ts": now, "title": title, "content": content, "tier": tier})
     while recent_news and now - recent_news[0]["ts"] > CONTEXT_MAX_AGE_SEC:
         recent_news.popleft()
     save_recent_news(list(recent_news))
+    archive_news({"id": news_id, "ts": now, "title": title, "content": content,
+                  "tier": tier, "summary": summary, "relevant": relevant})
 
 
 # ─── Message assembly ──────────────────────────────────────────────────────────
@@ -393,11 +398,12 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
             GEMINI_AVAILABLE = False
             # Gemini failed; skip this item entirely instead of broadcasting raw content
             log.warning("Gemini tiering failed; skipping push: %s", (title or content)[:60])
-            remember_news(title, content, None)
+            remember_news(title, content, None, news_id=str(item.get("id") or ""))
             return
         else:
             tier = result["tier"]
-            remember_news(title, content, tier)
+            remember_news(title, content, tier, summary=result["message"], relevant=result["relevant"],
+                          news_id=str(item.get("id") or ""))
             # Unknown/unparseable tier is treated as the lowest priority (LOW) rather than
             # bypassing the filter entirely, so MAX_TIER_TO_SEND still applies to it.
             tier_rank = TIER_RANK.get(tier, TIER_RANK["LOW"])
@@ -407,7 +413,7 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
                 return
             summary = result["message"]
     else:
-        remember_news(title, content, None)
+        remember_news(title, content, None, news_id=str(item.get("id") or ""))
         log.info("Gemini unavailable; retaining context without pushing raw news")
         return
 

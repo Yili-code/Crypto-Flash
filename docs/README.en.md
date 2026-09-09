@@ -157,6 +157,31 @@ python src/telegram_assistant.py
 
 In a Telegram group, you can mention the bot or use `/ask`; in private chat, you can send a question directly.
 
+### News queries and daily roundups
+
+| Command | Purpose |
+|---|---|
+| `/digest` | Yesterday's roundup, ordered by CRITICAL, HIGH, MEDIUM; up to 8 events |
+| `/digest today` | Today's roundup so far |
+| `/digest YYYY-MM-DD` | A selected date within the retained archive |
+| `/news`, `/news 10` | Latest 5 or 10 records, with a maximum of 10 |
+| `/search BTC` | Case-insensitive title/body search; multiple words match as a phrase |
+| `/important`, `/important 10` | HIGH and CRITICAL news only |
+| `/status` | Record counts, tier distribution, and latest record timestamp |
+| `/help`, `/start` | Command guide |
+
+These commands work without a Gemini key and accept `/command@bot_username` in groups. The assistant must be running to answer them. News queries display source excerpts; daily roundups reuse previously generated AI summaries, with no new model calls or cross-event inference. Ungraded raw news is never substituted for a daily summary.
+
+The existing assistant workflow starts every six hours and runs for at most 15 minutes. For continuous command replies, run `telegram_assistant.py` continuously locally. Daily delivery is an independent workflow and does not require the assistant to be running.
+
+`daily_digest.yml` is scheduled for **08:15 UTC+8**, delivering the previous calendar day's roundup through bot 01. Dates use the news ingestion timestamp in UTC+8. The separate `data/news_archive.json` retains **72 hours, up to 5,000 records**; the existing six-hour Q&A context stays unchanged. First use needs time to accumulate records. Empty or partial data is identified explicitly, and observed timestamps do not imply complete coverage.
+
+Actions read the files available at checkout; updates in a running monitor are only visible after persistence. `/status` describes that data snapshot, not live connection health. The monitor stops after 350 minutes to leave time for persistence before its job deadline.
+
+Successful delivery records the date in `data/daily_digest_state.json`; rerunning the same day skips delivery, and failed sends do not advance state. Corrupt state stops the job. A crash or persistence failure after sending can still cause a duplicate on retry, so inspect delivery logs before rerunning a failed job.
+
+Scheduled execution requires merging the workflow into the default branch, and GitHub schedules may be delayed. Manual workflow dispatch is also available. Running `python src/daily_digest.py` locally **sends** yesterday's report.
+
 ### 6. Run the YouTube monitor (optional)
 
 ```bash
@@ -169,7 +194,7 @@ Before running it, add the channels to `config/yt_channels.json`. The script pro
 
 ## GitHub Actions deployment
 
-This project includes four workflows:
+This project includes five workflows:
 
 | Workflow | Purpose |
 |---|---|
@@ -177,6 +202,7 @@ This project includes four workflows:
 | `telegram_assistant.yml` | Runs `src/telegram_assistant.py` to answer Telegram questions |
 | `yt_monitor.yml` | Runs `src/yt_monitor.py` to monitor YouTube videos and push summaries |
 | `ci.yml` | Runs `ruff` and `pytest` on push / PR; uses no secrets |
+| `daily_digest.yml` | Sends yesterday's roundup at 08:15 UTC+8 and persists the delivery date |
 
 Set these in GitHub `Settings → Secrets and variables → Actions`:
 
@@ -194,7 +220,7 @@ The Jin10 monitor workflow runs every 6 hours. `yt_monitor.yml` runs at minute 0
 
 `data/recent_news.json` (recent flash-news context) and `data/yt_seen_ids.json` (already-pushed videos) have to survive between runs. Without that the Q&A bot loses its background context and the YouTube monitor re-pushes the same videos on every run.
 
-Both files are **committed back to the repository** by `.github/actions/persist-state` at the end of each run:
+These files, along with `data/news_archive.json` and `data/daily_digest_state.json`, are **committed back to the repository** by `.github/actions/persist-state` at the end of each run:
 
 - Each file has exactly one writing workflow, so on a push race the writer replays its own copy on top of the current tip instead of clobbering another workflow's changes.
 - Nothing is committed when the content did not change. Commit messages carry `[skip ci]`, and `ci.yml` ignores `data/**`.
@@ -231,6 +257,8 @@ Both files are **committed back to the repository** by `.github/actions/persist-
 | `CONTEXT_MAX_ITEMS` | `80` | Max recent items retained |
 | `OUTBOX_MAXSIZE` | `200` | Pending-item queue size; the oldest is dropped when full so the receive loop never blocks |
 | `GEMINI_RECONNECT_DELAY` | `30` | Background retry interval in seconds while Gemini is unavailable, clamped to at least 1 second |
+| `NEWS_ARCHIVE_FILE` | `data/news_archive.json` | Daily report archive, retaining 72 hours and up to 5,000 records |
+| `DIGEST_STATE_FILE` | `data/daily_digest_state.json` | Most recently delivered digest date, written by the digest script |
 
 If the Gemini startup check or a summary request fails, flash pushes pause and a background task checks the connection every 30 seconds until it recovers. The monitor keeps receiving news and saving matching items as context, without forwarding raw text. Skipped items are not replayed after recovery. A missing API key also pauses pushes. This recovery task operates independently of the existing Jin10 WebSocket reconnect loop. An unset or blank `GEMINI_MODEL` uses the default model.
 

@@ -159,6 +159,29 @@ python src/telegram_assistant.py
 
 在群組中可直接 @ 機器人或使用 `/ask`；私人聊天則可直接輸入問題。
 
+### 新聞查詢與每日重點
+
+| Telegram 指令 | 用途 |
+|---|---|
+| `/digest` | 昨日重點，按 CRITICAL、HIGH、MEDIUM 排序，最多列出 8 則 |
+| `/digest today` | 今日截至目前的重點 |
+| `/digest YYYY-MM-DD` | 指定日期的重點，限保存的資料 |
+| `/news`、`/news 10` | 最近 5 則或 10 則快訊，最多 10 則 |
+| `/search BTC` | 不分大小寫搜尋近期新聞的標題與內文；多字搜尋採完整詞組比對 |
+| `/important`、`/important 10` | 只查看 HIGH、CRITICAL 快訊 |
+| `/status` | 可查詢筆數、分級分布、最新紀錄時間 |
+| `/help`、`/start` | 顯示指令說明 |
+
+這些指令不需要 Gemini API key，群組中也可使用 `/digest@你的機器人名稱`。`/news`、`/search`、`/important` 顯示來源摘錄；`/digest` 沿用監控時已產生的 AI 摘要，依重要性彙整，不增加模型呼叫，不把未分級原文當成摘要推送。Telegram 問答服務必須正在執行，才能回覆指令。目前問答 workflow 每 6 小時啟動、最多執行 15 分鐘；若需要持續回應，可持續執行本機 `telegram_assistant.py`。每日推送是獨立 workflow，不受問答服務是否啟動影響。
+
+**每日推送：** `daily_digest.yml` 設定於台灣時間 **08:15** 推送前一日 00:00–24:00 的重點，使用 `TELEGRAM_BOT_TOKEN_01` 與 `TELEGRAM_CHAT_ID`。日期按新聞收錄時間、UTC+8 計算。第一次啟用必須先讓監控累積資料；缺少資料會明確說明，並不代表當天沒有事件。日報逐則節錄既有摘要，並非新增一篇跨事件推論文章。
+
+日報另用 `data/news_archive.json` 保存最近 **72 小時、最多 5,000 則**，不改變問答背景原本 6 小時的範圍。日報會標示收錄起迄時間，但不保證資料完整。GitHub Actions 的問答與日報只讀取 checkout 時已提交的資料，監控執行中的更新尚未同步；`/status` 顯示的是資料新鮮度，並非連線健康檢查。
+
+`data/daily_digest_state.json` 記錄最近成功送出的日期，同一天重新執行會跳過；發送失敗不更新狀態。若發送成功後程序中斷，或狀態無法提交，重跑仍可能重複送出，請先檢查紀錄。狀態檔損壞時會停止並回報錯誤。
+
+排程需將 workflow 合併到 GitHub 預設分支後才會啟用，GitHub 排程可能延遲。也可手動觸發 workflow，或在本機執行 `python src/daily_digest.py`，後者會實際發送昨日報告。
+
 ### 6. 啟動 YouTube 監控（可選）
 
 ```bash
@@ -171,7 +194,7 @@ python src/yt_monitor.py
 
 ## GitHub Actions 部署
 
-本專案已包含四個 workflow：
+本專案已包含五個 workflow：
 
 | Workflow | 作用 |
 |---|---|
@@ -179,6 +202,7 @@ python src/yt_monitor.py
 | `telegram_assistant.yml` | 執行 `src/telegram_assistant.py`，接收 Telegram 問題並回答 |
 | `yt_monitor.yml` | 執行 `src/yt_monitor.py`，監控 YouTube 新影片並推播摘要 |
 | `ci.yml` | push / PR 時執行 `ruff` 與 `pytest`，不使用任何 secret |
+| `daily_digest.yml` | 每日台灣時間 08:15 推送昨日重點，保存送出日期以避免重複 |
 
 在 GitHub 的 `Settings → Secrets and variables → Actions` 中新增：
 
@@ -196,7 +220,7 @@ python src/yt_monitor.py
 
 `data/recent_news.json`（近期快訊上下文）與 `data/yt_seen_ids.json`（已推播影片）必須跨執行保留，否則問答會失去背景、YouTube 會重複推播同一批影片。
 
-這兩個檔案由 `.github/actions/persist-state` 於每次執行結束時 **commit 回 repo**：
+這兩個檔案，以及日報的 `data/news_archive.json`、`data/daily_digest_state.json`，由 `.github/actions/persist-state` 於每次執行結束時 **commit 回 repo**。快訊監控會在 350 分鐘後正常停止，留時間在 job 上限前保存資料：
 
 - 每個檔案只有一個 workflow 會寫入，所以遇到 push 競態時會把自己的版本重放到最新的 tip，不會覆蓋別的 workflow 的變更。
 - 內容沒變就不會產生 commit；commit 訊息帶 `[skip ci]`，`ci.yml` 也忽略 `data/**`。
@@ -233,6 +257,8 @@ python src/yt_monitor.py
 | `CONTEXT_MAX_ITEMS` | `80` | 近期訊息最多保留數量 |
 | `OUTBOX_MAXSIZE` | `200` | 待處理快訊佇列上限；滿了會丟棄最舊的一則，確保接收迴圈不被阻塞 |
 | `GEMINI_RECONNECT_DELAY` | `30` | Gemini 不可用時的背景重試間隔秒數，最小為 1 秒 |
+| `NEWS_ARCHIVE_FILE` | `data/news_archive.json` | 日報新聞保存位置，保留最近 72 小時、最多 5,000 則 |
+| `DIGEST_STATE_FILE` | `data/daily_digest_state.json` | 日報最近成功送出日期；由日報腳本寫入 |
 
 ### 問答腳本設定
 

@@ -57,4 +57,5 @@ runs:
           done
         done
 
-        echo "::warning::Could not persist $PATHS after 3 attempts; the next run will start from the committed state."
+        echo "::error::Could not persist $PATHS after 3 attempts; the next run will start from the committed state."
+        exit 1

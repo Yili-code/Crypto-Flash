@@ -8,6 +8,7 @@ import aiohttp
 
 from common import get_logger, load_recent_news
 from gemini import GEMINI_API_KEY, call_gemini
+from news_commands import local_command_reply, parse_command
 from tg import (
     TELEGRAM_API,
     TELEGRAM_BOT_TOKEN_01,
@@ -72,14 +73,11 @@ def extract_question(text: str, bot_username: str, chat_type: str) -> Optional[s
         return None
 
     # Resolve commands before mentions so /ask@bot never leaks /ask into the prompt.
-    command = re.match(r"^/([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?(?=\s|$)", text)
-    if command:
-        name, recipient = command.groups()
-        if recipient and recipient.lower() != bot_username.lower():
-            return None
-        if name != "ask":
-            return None
-        return text[command.end():].strip() or None
+    if text.startswith("/"):
+        command = parse_command(text, bot_username)
+        if command and command[0] == "ask":
+            return command[1] or None
+        return None
 
     if bot_username:
         mention = re.search(rf"(?<!\w)@{re.escape(bot_username)}(?![A-Za-z0-9_])", text, re.IGNORECASE)
@@ -92,6 +90,21 @@ def extract_question(text: str, bot_username: str, chat_type: str) -> Optional[s
         return text
 
     return None
+
+
+async def build_reply(session: aiohttp.ClientSession, text: str, bot_username: str, chat_type: str) -> Optional[str]:
+    reply = local_command_reply(text, bot_username)
+    if reply is not None:
+        return reply
+    if parse_command(text, bot_username) == ("ask", ""):
+        return "用法：/ask 問題，例如 /ask 最近有哪些重要消息？"
+    question = extract_question(text, bot_username, chat_type)
+    if not question:
+        return None
+    log.info("Received Q&A request: %s", question[:60])
+    if not GEMINI_API_KEY:
+        return "Gemini 尚未設定，暫時無法分析。你仍可使用 /news、/search、/important 與 /status。"
+    return await ask_gemini_qa(session, question) or "暫時無法產生回答，請稍後重試。可先用 /news 查閱近期快訊。"
 
 
 # ─── Main loop ─────────────────────────────────────────────────────────────────
@@ -135,15 +148,9 @@ async def telegram_assistant_loop(session: aiohttp.ClientSession) -> None:
             if TELEGRAM_CHAT_ID and chat_id != str(TELEGRAM_CHAT_ID):
                 continue
 
-            question = extract_question(text, bot_username, chat_type)
-            if not question:
+            answer = await build_reply(session, text, bot_username, chat_type)
+            if answer is None:
                 continue
-
-            log.info("Received Q&A request: %s", question[:60])
-            if not GEMINI_API_KEY:
-                answer = "GEMINI_API_KEY is not set, so the Q&A feature is currently unavailable."
-            else:
-                answer = await ask_gemini_qa(session, question) or "The response could not be generated temporarily. Please try again later."
             ok = await send_telegram_message(session, chat_id, answer, reply_to=message_id)
             log.info("Q&A response %s", "successful" if ok else "failed")
 
@@ -153,7 +160,7 @@ async def main() -> None:
         log.error("TELEGRAM_BOT_TOKEN_01 is not set; the Q&A service cannot start")
         return
     if not GEMINI_API_KEY:
-        log.warning("GEMINI_API_KEY is not set; Q&A will always return a failure message")
+        log.warning("GEMINI_API_KEY is not set; local news commands remain available, AI Q&A is disabled")
 
     async with aiohttp.ClientSession() as session:
         await telegram_assistant_loop(session)

@@ -1,0 +1,38 @@
+name: Daily news digest
+
+on:
+  schedule:
+    # 08:15 UTC+8: summarize the previous calendar day.
+    - cron: '15 0 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: daily-news-digest
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  send-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Send previous day's digest
+        env:
+          TELEGRAM_BOT_TOKEN_01: ${{ secrets.TELEGRAM_BOT_TOKEN_01 }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python src/daily_digest.py
+      - name: Persist delivery state
+        if: always()
+        uses: ./.github/actions/persist-state
+        with:
+          paths: data/daily_digest_state.json
+          message: "chore(state): record daily digest delivery [skip ci]"
