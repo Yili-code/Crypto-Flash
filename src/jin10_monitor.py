@@ -286,7 +286,7 @@ Write "message" as an HTML-formatted briefing string strictly adhering to:
    - Use plain JSON escaped newline characters "\n" for line breaks inside the string.
 
 # "message" String Structure:
-<b>(News Title translated to Traditional Chinese)</b>\n\n(One-sentence core summary, natural human tone)\n\n<b>Crypto</b>\n(Short-term analysis in 1 concise sentence)\n\n<b>總體經濟影響</b>\n(Optional: 1 sentence ONLY if impact is massive; otherwise leave completely empty)\n\n<b>世界發展影響</b>\n(Optional: 1 sentence ONLY if impact is massive; otherwise leave completely empty)\n\n<b>Keywords</b> | <code>Term A</code>, <code>Term B</code>, <code>Term C</code>
+<b>(News Title translated to Traditional Chinese)</b>\n\n(One-sentence core summary, natural human tone)\n\n<b>Crypto</b>\n(Short-term analysis in 1 concise sentence)\n\n<b>總體經濟影響</b>\n(Optional: 1 sentence ONLY if impact is massive; otherwise leave completely empty)\n\n<b>世界發展影響</b>\n(Optional: 1 sentence ONLY if impact is massive; otherwise leave completely empty)\n\n
 
 # Output Format:
 Respond with ONLY a raw JSON object (no markdown fences, no commentary) matching this shape:
