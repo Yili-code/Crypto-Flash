@@ -84,7 +84,7 @@ news_archive.json → Daily roundups, timelines, and tracked updates
 
 `flash_service.py` runs ingestion and Q&A together on one runner, sharing live context. Stop any old standalone Telegram Assistant workflow run before migration to avoid competing Telegram pollers.
 
-Records are saved before the push threshold check and Telegram delivery, so a saved record does not prove delivery. The default `MEDIUM` threshold sends CRITICAL, HIGH, and MEDIUM; LOW or irrelevant items can still be retained. When the queue fills, the oldest pending item is dropped before processing and is not archived.
+Records are saved before the push threshold check and Telegram delivery, so a saved record does not prove delivery. The default `MEDIUM` threshold sends CRITICAL, HIGH, and MEDIUM; LOW items are discarded before storage and never pushed; unclassified records are still retained. When the queue fills, the oldest pending item is dropped before processing and is not archived.
 
 ### YouTube video monitor
 

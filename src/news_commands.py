@@ -4,10 +4,11 @@ import math
 import re
 import time
 from datetime import datetime, timedelta, timezone
-from html import escape
+from html import escape, unescape
 
 from common import CONTEXT_MAX_AGE_SEC, TIER_LEVELS, load_recent_news
 from daily_digest import build_digest, previous_day
+from news_archive import load_archive
 
 DISPLAY_TZ = timezone(timedelta(hours=8))
 MAX_RESULTS = 10
@@ -17,7 +18,7 @@ HELP_TEXT = """<b>Crypto Flash 指令</b>
 /news 10 — 最近 10 則（最多 10 則）
 /search BTC — 搜尋標題與內文，不分大小寫
 /search spot ETF — 搜尋完整詞組
-/important — 查看 HIGH、CRITICAL 快訊
+/important — 查看 HIGH、CRITICAL 快訊摘要
 /important 10 — 最多顯示 10 則重要快訊
 /status — 查看新聞資料筆數與新鮮度
 /digest — 昨日重點，依重要性排序
@@ -33,7 +34,7 @@ HELP_TEXT = """<b>Crypto Flash 指令</b>
 /help — 顯示指令說明
 
 查詢使用已保存的近期新聞，時間為 UTC+8。
-新聞查詢不需要 Gemini；顯示的是來源摘錄，並非 AI 摘要。"""
+/news、/search 顯示來源摘錄；/important 顯示已保存的 AI 摘要，查詢時不需重新生成。"""
 
 
 def parse_command(text: str, bot_username: str) -> tuple[str, str] | None:
@@ -59,7 +60,7 @@ def _recent_items() -> list[dict]:
         title = str(item.get("title") or "").strip()
         content = str(item.get("content") or "").strip()
         if title or content:
-            items.append({"ts": ts, "title": title, "content": content, "tier": item.get("tier")})
+            items.append({**item, "ts": ts, "title": title, "content": content, "tier": item.get("tier")})
     return sorted(items, key=lambda item: item["ts"], reverse=True)
 
 
@@ -88,6 +89,38 @@ def _render_results(items: list[dict], heading: str, limit: int) -> str:
         f"顯示 {len(rows)} / {len(items)} 則 · UTC+8 · 來源摘錄\n\n"
         + "\n\n".join(rows)
     )
+
+
+def _render_important(items: list[dict], limit: int) -> str:
+    heading = "<b>重要快訊摘要</b>"
+    if not items:
+        return heading + "\n目前保存的近期新聞中沒有符合條件的資料。"
+    # Older recent-context files omitted summaries; recover only exact matching records.
+    archived = {(it["ts"], it.get("title", ""), it.get("content", "")): it for it in load_archive()}
+    rows = []
+    missing = 0
+    seen = set()
+    for item in items:
+        source = item
+        if not item.get("summary"):
+            source = archived.get((item["ts"], item["title"], item["content"]), item)
+        if source.get("relevant") is False:
+            continue
+        summary = source.get("summary")
+        plain = unescape(re.sub(r"<[^>]*>", "", summary)).strip() if isinstance(summary, str) else ""
+        if not plain:
+            missing += 1
+            continue
+        if plain in seen:
+            continue
+        seen.add(plain)
+        clock = datetime.fromtimestamp(item["ts"], DISPLAY_TZ).strftime("%m/%d %H:%M")
+        row = f"<b>{item['tier']} · {clock}</b>\n{escape(_clip(plain, 600))}"
+        if len(rows) < limit and sum(len(part.encode("utf-16-le")) // 2 for part in rows + [row]) <= MESSAGE_BUDGET - 500:
+            rows.append(row)
+    body = "\n\n".join(rows) if rows else "目前沒有可用的已整理摘要。"
+    footer = f"\n\n另有 {missing} 則重要快訊尚無摘要，未列出原文。" if missing else ""
+    return heading + f"\n顯示 {len(rows)} 則 · UTC+8 · 已保存的 AI 摘要節錄\n\n" + body + footer
 
 
 def local_command_reply(text: str, bot_username: str) -> str | None:
@@ -143,5 +176,5 @@ def local_command_reply(text: str, bot_username: str) -> str | None:
         return _render_results(items, f"搜尋：{args}", MAX_RESULTS)
     if name == "important":
         items = [item for item in items if item["tier"] in ("HIGH", "CRITICAL")]
-        return _render_results(items, "重要快訊", limit)
+        return _render_important(items, limit)
     return _render_results(items, "近期快訊", limit)

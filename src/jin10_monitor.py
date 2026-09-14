@@ -356,7 +356,8 @@ def remember_news(
     title: str, content: str, tier: Optional[str], *, summary: str = "", relevant: Optional[bool] = None, news_id: str = "",
 ) -> None:
     now = time.time()
-    recent_news.append({"ts": now, "title": title, "content": content, "tier": tier})
+    recent_news.append({"ts": now, "title": title, "content": content, "tier": tier,
+                        "summary": summary, "relevant": relevant, "id": news_id})
     while recent_news and now - recent_news[0]["ts"] > CONTEXT_MAX_AGE_SEC:
         recent_news.popleft()
     save_recent_news(list(recent_news))
@@ -402,6 +403,8 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
             return
         else:
             tier = result["tier"]
+            if tier == "LOW":
+                return
             remember_news(title, content, tier, summary=result["message"], relevant=result["relevant"],
                           news_id=str(item.get("id") or ""))
             # Unknown/unparseable tier is treated as the lowest priority (LOW) rather than

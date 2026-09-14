@@ -13,9 +13,9 @@ from fakes import FakeResponse
 def news(monkeypatch):
     now = time.time()
     items = [
-        {"ts": now - 90, "title": "Older BTC", "content": "Spot ETF inflows", "tier": "CRITICAL"},
+        {"ts": now - 90, "title": "Older BTC", "content": "Spot ETF inflows", "tier": "CRITICAL", "summary": "BTC 整理後重點"},
         {"ts": now - 10, "title": "Latest ETH", "content": "Ethereum update", "tier": "MEDIUM"},
-        {"ts": now - 60, "title": "Fed", "content": "BTC liquidity", "tier": "HIGH"},
+        {"ts": now - 60, "title": "Fed", "content": "BTC liquidity", "tier": "HIGH", "summary": "Fed 整理後重點"},
         {"ts": now - 30, "title": "Unclassified", "content": "", "tier": None},
     ]
     monkeypatch.setattr(nc, "load_recent_news", lambda: items)
@@ -38,8 +38,38 @@ def test_search_matches_title_and_content_case_insensitively(news):
 
 def test_important_only_includes_high_and_critical(news):
     reply = nc.local_command_reply("/important", "bot")
-    assert "Older BTC" in reply and "Fed" in reply
+    assert "BTC 整理後重點" in reply and "Fed 整理後重點" in reply
+    assert "Older BTC" not in reply and "BTC liquidity" not in reply
     assert "Latest ETH" not in reply and "Unclassified" not in reply
+
+
+def test_important_recovers_legacy_summary_and_never_falls_back_to_raw(news, monkeypatch):
+    archived = {**news[0], "summary": "Archive summary"}
+    news[0].pop("summary")
+    news[2].pop("summary")
+    monkeypatch.setattr(nc, "load_archive", lambda: [archived])
+    reply = nc.local_command_reply("/important@bot", "bot")
+    assert "Archive summary" in reply
+    assert "1 則重要快訊尚無摘要" in reply
+    assert "BTC liquidity" not in reply and "Spot ETF inflows" not in reply
+
+
+def test_important_summary_limit_and_html_budget(news):
+    news[:] = [{"ts": time.time() - i, "title": "raw", "content": "raw body", "tier": "HIGH",
+                "summary": f"<b>Summary {i}</b> " + "😀 & " * 500} for i in range(10)]
+    reply = nc.local_command_reply("/important 10", "bot")
+    assert len(reply.encode("utf-16-le")) // 2 < 4096
+    assert "&amp;" in reply and "raw body" not in reply
+    assert "顯示 1 則" in nc.local_command_reply("/important 1", "bot")
+
+
+def test_important_without_any_summary_is_explicit(news, monkeypatch):
+    for item in news:
+        item.pop("summary", None)
+    monkeypatch.setattr(nc, "load_archive", lambda: [])
+    reply = nc.local_command_reply("/important", "bot")
+    assert "目前沒有可用的已整理摘要" in reply
+    assert "2 則重要快訊尚無摘要" in reply
 
 
 @pytest.mark.parametrize("text", ["/news 0", "/news -1", "/news 11", "/news abc", "/news 1 2", "/search", "/status x"])

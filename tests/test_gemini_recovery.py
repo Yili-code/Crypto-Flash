@@ -1,6 +1,6 @@
 import asyncio
 import importlib
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -70,6 +70,20 @@ def test_missing_key_never_pushes_raw_news(monkeypatch, monitor):
 
     asyncio.run(scenario())
     probe.assert_not_awaited()
+    monitor.assert_not_awaited()
+
+
+@pytest.mark.parametrize("relevant", [True, False])
+def test_low_is_discarded_before_storage_even_with_low_push_threshold(monkeypatch, monitor, relevant):
+    monkeypatch.setattr(jm, "GEMINI_AVAILABLE", True)
+    monkeypatch.setattr(jm, "MAX_TIER_TO_SEND", 4)
+    monkeypatch.setattr(jm, "summarize_with_gemini", AsyncMock(return_value={
+        "tier": "LOW", "relevant": relevant, "message": "Low summary",
+    }))
+    remember = Mock()
+    monkeypatch.setattr(jm, "remember_news", remember)
+    asyncio.run(jm.handle_item(None, {"data": {"content": "BTC low priority"}}))
+    remember.assert_not_called()
     monitor.assert_not_awaited()
 
 
