@@ -82,7 +82,7 @@ recent_news.json → News queries, status, and AI Q&A context
 news_archive.json → Daily roundups, timelines, and tracked updates
 ```
 
-`jin10_monitor.py` and `telegram_assistant.py` run as separate processes and share the same `recent_news.json` file for context.
+`flash_service.py` runs ingestion and Q&A together on one runner, sharing live context. Stop any old standalone Telegram Assistant workflow run before migration to avoid competing Telegram pollers.
 
 Records are saved before the push threshold check and Telegram delivery, so a saved record does not prove delivery. The default `MEDIUM` threshold sends CRITICAL, HIGH, and MEDIUM; LOW or irrelevant items can still be retained. When the queue fills, the oldest pending item is dropped before processing and is not archived.
 
@@ -111,7 +111,7 @@ Example channel configuration:
   {
     "name": "Crypto Punk",
     "channel_id": "UCeeeGbipVKpz23A8_c3I3uA",
-    "system_prompt": "以 JARVIS 的口吻說明",
+    "system_prompt": "以 HEIMDALL 的口吻說明",
     "max_new_per_run": 3
   }
 ]
@@ -156,10 +156,10 @@ pip install -r requirements.txt
 python src/jin10_monitor.py
 ```
 
-### 5. Run the Telegram Q&A bot (optional)
+### 5. Run monitoring and Telegram Q&A together (instead of step 4)
 
 ```bash
-python src/telegram_assistant.py
+python src/flash_service.py
 ```
 
 In a Telegram group, you can mention the bot or use `/ask`; in private chat, you can send a question directly.
@@ -236,8 +236,7 @@ This project includes five workflows:
 
 | Workflow | Purpose |
 |---|---|
-| `flash_monitor.yml` | Runs `src/jin10_monitor.py` on a schedule and pushes filtered news |
-| `telegram_assistant.yml` | Runs `src/telegram_assistant.py` to answer Telegram questions |
+| `flash_monitor.yml` | Runs `src/flash_service.py` for live ingestion and Q&A on a schedule and pushes filtered news |
 | `yt_monitor.yml` | Runs `src/yt_monitor.py` to monitor YouTube videos and push summaries |
 | `ci.yml` | Runs `ruff` and `pytest` on push / PR; uses no secrets |
 | `daily_digest.yml` | Sends yesterday's roundup at 08:15 UTC+8 and persists the delivery date |

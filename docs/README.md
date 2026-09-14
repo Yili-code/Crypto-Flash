@@ -82,7 +82,7 @@ recent_news.json → 新聞查詢、狀態與 AI 問答背景
 news_archive.json → 每日重點、事件時間線與追蹤進展
 ```
 
-`jin10_monitor.py` 和 `telegram_assistant.py` 是兩個獨立流程，共同使用 `recent_news.json` 作為近期快訊上下文。
+`flash_service.py` 在同一個 runner 同時執行監控和問答，即時共用 `recent_news.json`。舊版分開執行的 Telegram Assistant workflow 必須停止，避免重複接收 Telegram updates。
 
 Gemini 啟動檢查或執行中的摘要請求失敗時，快訊監控會暫停推播並在背景每 30 秒重新檢查連線，成功後自動恢復摘要推播。中斷期間仍接收快訊並保存符合關鍵字的新聞背景，不會改推原文；這些已略過的新聞不會在恢復後補發。未設定 API key 時也會暫停推播。這項恢復機制與 Jin10 WebSocket 原有的斷線重連分開運作。
 
@@ -113,7 +113,7 @@ Telegram 推播摘要與來源連結
   {
     "name": "加密龐克",
     "channel_id": "UCeeeGbipVKpz23A8_c3I3uA",
-    "system_prompt": "以 JARVIS 的口吻說明",
+    "system_prompt": "以 HEIMDALL 的口吻說明",
     "max_new_per_run": 3
   }
 ]
@@ -158,10 +158,10 @@ pip install -r requirements.txt
 python src/jin10_monitor.py
 ```
 
-### 5. 啟動 Telegram 問答腳本（可選）
+### 5. 同時啟動監控與 Telegram 問答（取代步驟 4）
 
 ```bash
-python src/telegram_assistant.py
+python src/flash_service.py
 ```
 
 在群組中可直接 @ 機器人或使用 `/ask`；私人聊天則可直接輸入問題。
@@ -236,8 +236,7 @@ python src/yt_monitor.py
 
 | Workflow | 作用 |
 |---|---|
-| `flash_monitor.yml` | 執行 `src/jin10_monitor.py`，監控快訊並推播 |
-| `telegram_assistant.yml` | 執行 `src/telegram_assistant.py`，接收 Telegram 問題並回答 |
+| `flash_monitor.yml` | 執行 `src/flash_service.py`，共用即時快訊供問答使用，監控快訊並推播 |
 | `yt_monitor.yml` | 執行 `src/yt_monitor.py`，監控 YouTube 新影片並推播摘要 |
 | `ci.yml` | push / PR 時執行 `ruff` 與 `pytest`，不使用任何 secret |
 | `daily_digest.yml` | 每日台灣時間 08:15 推送昨日重點，保存送出日期以避免重複 |
