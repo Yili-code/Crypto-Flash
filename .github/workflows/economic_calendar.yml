@@ -1,0 +1,38 @@
+name: Daily economic calendar
+
+on:
+  schedule:
+    # 08:00 Asia/Taipei = 00:00 UTC. GitHub may delay scheduled jobs.
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: daily-economic-calendar
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Send today's economic calendar
+        env:
+          TELEGRAM_BOT_TOKEN_01: ${{ secrets.TELEGRAM_BOT_TOKEN_01 }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python src/economic_calendar.py
+      - name: Persist calendar delivery state
+        if: always()
+        uses: ./.github/actions/persist-state
+        with:
+          paths: data/economic_calendar_state.json
+          message: "chore(state): record economic calendar delivery [skip ci]"
