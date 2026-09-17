@@ -126,8 +126,8 @@ Example channel configuration:
 ### 1. Clone or fork the repo
 
 ```bash
-git clone https://github.com/<your-user>/<your-repo>.git
-cd jin10_news_scraper
+git clone https://github.com/Yili-code/Crypto-Flash.git
+cd Crypto-Flash
 ```
 
 ### 2. Configure environment variables
