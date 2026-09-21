@@ -108,7 +108,9 @@ Gemini watches the video and writes an adaptive summary with external fact-check
 Push the summary and source link to Telegram
 ```
 
-The first run for each channel only warms up `data/yt_seen_ids.json` with the videos already in the RSS feed; it does not send notifications for existing videos. Later runs process at most `max_new_per_run` new videos per channel. Older videos beyond that limit are marked as seen without being pushed. If Gemini summarization fails, the monitor still sends the video link.
+The first run for each channel warms up `data/yt_seen_ids.json` without notifying existing videos. Subsequent discoveries are all saved as pending. `max_new_per_run` limits attempts per channel, including retries; excess videos remain pending and are never marked seen merely for exceeding the limit. Failed summaries still send a video link once.
+
+All feeds are saved before processing videos round-robin (A1, B1, C1, A2, B2, C2). `data/yt_schedule.json` records the next channel before each attempt so interrupted runs resume fairly; completed runs also rotate their starting channel. A 21-minute processing deadline leaves work pending for later runs. Discovery continues even if Telegram is unavailable. Videos that left RSS before ever being discovered cannot be recovered automatically; previously skipped legacy seen IDs are not replayed.
 
 Example channel configuration:
 
@@ -324,9 +326,11 @@ If the Gemini startup check or a summary request fails, flash pushes pause and a
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN_02` | empty | Telegram bot token used for YouTube summary pushes |
 | `YT_CHANNELS_CONFIG` | `config/yt_channels.json` | Path to the YouTube channel configuration |
-| `YT_MAX_NEW_PER_RUN` | `3` | Maximum new videos per run when a channel does not set its own limit |
+| `YT_MAX_NEW_PER_RUN` | `3` | Maximum pending video attempts per channel per run, including retries; excess work is retained |
 | `YT_SEEN_STATE_FILE` | `data/yt_seen_ids.json` | Path to the processed-video state file |
 | `YT_PROGRESS_FILE` | `data/yt_progress.json` | Notification, summary, research and delivery progress; custom paths also require updating workflow persistence |
+| `YT_SCHEDULE_FILE` | `data/yt_schedule.json` | Next round-robin channel; custom paths require updating workflow persistence |
+| `YT_RUN_BUDGET_SECONDS` | `1260` | Processing deadline; keep below the workflow's 24-minute external timeout |
 | `YT_MAX_SEEN_IDS` | `300` | Maximum processed video IDs retained per channel |
 
 ---

@@ -211,18 +211,19 @@ def test_main_stops_before_network_when_state_cannot_be_saved(wired, monkeypatch
 
 
 def test_main_does_not_continue_after_receipt_save_failure(wired, monkeypatch):
-    monkeypatch.setattr(yt, "load_channel_configs", lambda: [channel_cfg(), channel_cfg(name="other")])
+    monkeypatch.setattr(yt, "load_channel_configs", lambda: [channel_cfg(), channel_cfg(name="other", channel_id="UC456")])
+    yt.save_seen_state({"c": ["older"], "other": ["older"]})
     processed = []
 
     async def accessible(*args):
         return True
 
-    async def fail_process(session, cfg, state):
+    async def fail_process(session, cfg, record, state):
         processed.append(cfg["name"])
         raise yt.SeenStateError("disk unavailable")
 
     monkeypatch.setattr(yt, "check_chat_access", accessible)
-    monkeypatch.setattr(yt, "process_channel", fail_process)
+    monkeypatch.setattr(yt, "process_video", fail_process)
     with pytest.raises(yt.SeenStateError):
         asyncio.run(yt.main())
     assert processed == ["c"]
@@ -237,13 +238,16 @@ def test_a_failed_push_leaves_the_video_unread_for_the_next_run(wired):
     assert state["c"] == ["older"]
 
 
-def test_a_backlog_over_the_limit_is_trimmed_and_the_rest_marked_read(wired):
+def test_a_backlog_over_the_limit_is_saved_and_consumed_in_batches(wired):
     sent, _ = wired
     state = {"c": ["seed"]}
     asyncio.run(yt.process_channel(None, channel_cfg(max_new_per_run=1), state))
-    assert len(sent) == 1                       # only the newest is pushed
-    assert "older" in state["c"]                # the skipped one is marked read, not re-pushed
-    assert state["c"][-1] == "newest"
+    assert len(sent) == 1
+    assert state["c"] == ["seed", "older"]
+    assert not yt.load_progress()["UC123:newest"]["notified"]
+    asyncio.run(yt.process_channel(None, channel_cfg(max_new_per_run=1), yt.load_seen_state()))
+    assert len(sent) == 2
+    assert yt.load_seen_state()["c"] == ["seed", "older", "newest"]
 
 
 def test_nothing_happens_when_there_are_no_new_videos(wired):

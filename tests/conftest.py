@@ -8,6 +8,7 @@ import gemini_policy
 @pytest.fixture(autouse=True)
 def _isolated_youtube_progress(tmp_path, monkeypatch):
     monkeypatch.setattr(yt_monitor, "PROGRESS_FILE", tmp_path / "yt_progress.json")
+    monkeypatch.setattr(yt_monitor, "SCHEDULE_FILE", tmp_path / "yt_schedule.json")
     monkeypatch.setenv("GEMINI_YOUTUBE_USAGE_FILE", str(tmp_path / "youtube_usage.json"))
     monkeypatch.setenv("GEMINI_LIVE_USAGE_FILE", str(tmp_path / "live_usage.json"))
     monkeypatch.setenv("GEMINI_YOUTUBE_DAILY_REQUESTS", "120")

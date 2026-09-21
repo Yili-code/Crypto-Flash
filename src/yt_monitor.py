@@ -22,6 +22,8 @@ CHANNELS_CONFIG_FILE = Path(os.getenv("YT_CHANNELS_CONFIG", str(BASE_DIR / "conf
 DEFAULT_MAX_NEW_PER_RUN = int(os.getenv("YT_MAX_NEW_PER_RUN", "3"))
 SEEN_STATE_FILE = Path(os.getenv("YT_SEEN_STATE_FILE", str(BASE_DIR / "data" / "yt_seen_ids.json")))
 PROGRESS_FILE = Path(os.getenv("YT_PROGRESS_FILE", str(BASE_DIR / "data" / "yt_progress.json")))
+SCHEDULE_FILE = Path(os.getenv("YT_SCHEDULE_FILE", str(BASE_DIR / "data" / "yt_schedule.json")))
+RUN_BUDGET_SECONDS = max(1, int(os.getenv("YT_RUN_BUDGET_SECONDS", "1260")))
 MAX_SEEN_IDS_PER_CHANNEL = int(os.getenv("YT_MAX_SEEN_IDS", "300"))
 
 
@@ -68,6 +70,7 @@ def load_channel_configs() -> list[dict]:
 
     configs = []
     seen_names = set()
+    seen_channels = set()
     for i, item in enumerate(raw):
         if not isinstance(item, dict):
             log.warning("頻道設定第 %d 項不是物件，跳過。", i)
@@ -82,7 +85,11 @@ def load_channel_configs() -> list[dict]:
         if name in seen_names:
             log.warning("頻道設定的 name「%s」重複，跳過第 %d 項（會導致已讀狀態互相覆蓋）。", name, i)
             continue
+        if channel_id in seen_channels:
+            log.warning("頻道 ID 重複，跳過：%s", channel_id)
+            continue
         seen_names.add(name)
+        seen_channels.add(channel_id)
         configs.append({
             "name": name,
             "channel_id": channel_id,
@@ -348,9 +355,8 @@ async def process_video(session, cfg: dict, record: dict, progress: dict) -> Non
     await deliver_progress(session, record, progress)
 
 
-async def process_channel(session: aiohttp.ClientSession, cfg: dict, seen_state: dict[str, list[str]]) -> None:
+async def discover_channel(session, cfg: dict, seen_state: dict, progress: dict) -> None:
     name = cfg["name"]
-    progress = load_progress()
     xml_text = await fetch_feed(session, f"https://www.youtube.com/feeds/videos.xml?channel_id={cfg['channel_id']}")
     channel_title, entries = name, []
     if xml_text is not None:
@@ -371,14 +377,6 @@ async def process_channel(session: aiohttp.ClientSession, cfg: dict, seen_state:
         if entry["video_id"] not in seen_set and key not in progress:
             new_entries.append(entry)
             seen_set.add(entry["video_id"])
-    # Preserve the existing new-video cap; already-pending work is never discarded.
-    limit = cfg["max_new_per_run"]
-    if len(new_entries) > limit:
-        log.warning("[%s] %d 部新片超過上限 %d，依既有設定略過較舊新片", name, len(new_entries), limit)
-        seen_ids.extend(e["video_id"] for e in new_entries[:-limit])
-        seen_state[name] = seen_ids
-        save_seen_state(seen_state)
-        new_entries = new_entries[-limit:]
     for entry in new_entries:
         key = cfg["channel_id"] + ":" + entry["video_id"]
         progress[key] = {**entry, "channel_id": cfg["channel_id"], "channel_title": channel_title,
@@ -386,20 +384,103 @@ async def process_channel(session: aiohttp.ClientSession, cfg: dict, seen_state:
                          "summary_delivered": False, "research_delivered": False,
                          "summary": "", "research": "", "delivery": None, "last_attempt": 0}
     save_progress(progress)
+
+
+def pending_for(cfg: dict, progress: dict) -> list[dict]:
     pending = [r for r in progress.values() if r["channel_id"] == cfg["channel_id"] and not r["research_delivered"]]
     pending.sort(key=lambda r: r["last_attempt"])
-    log.info("[%s] 待完成 %d 部，本輪最多處理 %d 部", name, len(pending), limit)
-    for record in pending[:limit]:
-        record["last_attempt"] = time.time()
-        save_progress(progress)
-        await process_video(session, cfg, record, progress)
-        if record["notified"] and record["video_id"] not in seen_ids:
-            seen_ids.append(record["video_id"])
-            seen_state[name] = seen_ids
-            save_seen_state(seen_state)
+    return pending[:cfg["max_new_per_run"]]
 
 
-# ─── 主流程（跑一次就結束，依序處理每個頻道） ────────────────────────────────
+async def attempt_video(session, cfg: dict, record: dict, progress: dict, seen_state: dict) -> None:
+    record["last_attempt"] = time.time()
+    save_progress(progress)
+    await process_video(session, cfg, record, progress)
+    seen_ids = seen_state.setdefault(cfg["name"], [])
+    if record["notified"] and record["video_id"] not in seen_ids:
+        seen_ids.append(record["video_id"])
+        save_seen_state(seen_state)
+
+
+async def process_channel(session: aiohttp.ClientSession, cfg: dict, seen_state: dict[str, list[str]]) -> None:
+    """Single-channel entry point; production uses the shared round-robin runner."""
+    progress = load_progress()
+    await discover_channel(session, cfg, seen_state, progress)
+    for record in pending_for(cfg, progress):
+        await attempt_video(session, cfg, record, progress, seen_state)
+
+
+def load_schedule() -> str:
+    if not SCHEDULE_FILE.exists():
+        return ""
+    try:
+        state = json.loads(SCHEDULE_FILE.read_text(encoding="utf-8"))
+        if not isinstance(state, dict) or not isinstance(state.get("next_channel_id"), str):
+            raise ValueError("invalid schedule cursor")
+        return state["next_channel_id"]
+    except (OSError, ValueError, TypeError) as exc:
+        raise SeenStateError(f"讀取輪流處理進度失敗：{exc}") from exc
+
+
+def save_schedule(next_channel_id: str) -> None:
+    try:
+        SCHEDULE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        temporary = SCHEDULE_FILE.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps({"next_channel_id": next_channel_id}), encoding="utf-8")
+        temporary.replace(SCHEDULE_FILE)
+    except OSError as exc:
+        raise SeenStateError(f"保存輪流處理進度失敗：{exc}") from exc
+
+
+async def run_channels(session, configs: list[dict], seen_state: dict) -> None:
+    if not configs:
+        return
+    deadline = time.monotonic() + RUN_BUDGET_SECONDS
+    cursor = load_schedule()
+    save_schedule(cursor)
+    progress = load_progress()
+    # Discover and persist every feed before any potentially expensive AI work.
+    for cfg in configs:
+        try:
+            await discover_channel(session, cfg, seen_state, progress)
+        except SeenStateError:
+            raise
+        except Exception as exc:
+            log.warning("[%s] 抓取失敗，保留既有待處理影片：%s", cfg["name"], type(exc).__name__)
+    if not await check_chat_access(session, TELEGRAM_CHAT_ID, TELEGRAM_BOT_TOKEN_02):
+        log.warning("Telegram 暫不可用，新片已保存，後續接續處理")
+        return
+    start = next((i for i, cfg in enumerate(configs) if cfg["channel_id"] == cursor), 0)
+    ordered = configs[start:] + configs[:start]
+    batches = {cfg["channel_id"]: pending_for(cfg, progress) for cfg in ordered}
+    # Freeze each run's batch: one video is attempted at most once per run.
+    for round_index in range(max((len(batch) for batch in batches.values()), default=0)):
+        for index, cfg in enumerate(ordered):
+            batch = batches[cfg["channel_id"]]
+            if round_index >= len(batch):
+                continue
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                save_schedule(cfg["channel_id"])
+                log.info("本輪時間用完，剩餘影片保留至下次")
+                return
+            # Save before the attempt so cancellation rotates away from a slow channel.
+            save_schedule(ordered[(index + 1) % len(ordered)]["channel_id"])
+            try:
+                async with asyncio.timeout(remaining):
+                    await attempt_video(session, cfg, batch[round_index], progress, seen_state)
+            except SeenStateError:
+                raise
+            except TimeoutError:
+                log.warning("處理逾時，已保存影片與下一個頻道進度")
+                return
+            except Exception as exc:
+                log.error("[%s] 處理失敗，保留影片待重試：%s", cfg["name"], type(exc).__name__)
+    # A full pass also rotates its starting channel, including budget-limited runs.
+    save_schedule(ordered[1 % len(ordered)]["channel_id"])
+
+
+# ─── 主流程（先保存所有新片，再輪流處理各頻道） ──────────────────────────────
 
 async def main() -> None:
     configs = load_channel_configs()
@@ -414,17 +495,7 @@ async def main() -> None:
     save_seen_state(seen_state)
     save_progress(load_progress())
     async with aiohttp.ClientSession() as session:
-        if not await check_chat_access(session, TELEGRAM_CHAT_ID, TELEGRAM_BOT_TOKEN_02):
-            log.error("Telegram 推播目標不可用，先跳過本次執行（避免白跑 Gemini 影片摘要）。")
-            return
-        for cfg in configs:
-            try:
-                await process_channel(session, cfg, seen_state)
-            except SeenStateError:
-                # Continuing would deliver more videos without durable receipts.
-                raise
-            except Exception as exc:
-                log.error("[%s] 處理過程發生未預期例外：%s", cfg["name"], exc)
+        await run_channels(session, configs, seen_state)
 
 
 if __name__ == "__main__":

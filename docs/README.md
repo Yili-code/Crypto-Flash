@@ -120,7 +120,9 @@ Gemini 觀看影片並依影片內容彈性整理摘要並查證關鍵論點
 Telegram 推播摘要與來源連結
 ```
 
-首次執行某個頻道時，程式只會把 RSS 中現有影片寫入 `data/yt_seen_ids.json` 作為預熱，不會推播既有影片。之後每次執行最多處理該頻道 `max_new_per_run` 部新影片；超過上限的較舊影片會標記為已讀但不推播。即使 Gemini 摘要失敗，仍會推送影片連結。
+首次執行某個頻道時，程式只會把 RSS 中現有影片寫入 `data/yt_seen_ids.json` 作為預熱，不會推播既有影片。之後抓到的新影片全部保存至待處理清單，`max_new_per_run` 只限制該頻道單次嘗試的影片數（包含重試），不會因超過上限而標記已讀或丟棄。即使 Gemini 摘要失敗，仍會推送影片連結。
+
+每輪先抓取並保存所有頻道，再以每頻道一部的方式輪流處理，例如 A1 → B1 → C1 → A2 → B2 → C2。每次嘗試前將下一個頻道寫入 `data/yt_schedule.json`，中斷後接續；完整跑完也會輪換下次起始頻道。預設 21 分鐘停止本輪處理，剩餘影片留待後續排程。Telegram 暫時不可用時仍保存新片。此機制只能保留已抓到的影片，停機期間已離開 RSS、從未被抓到的影片無法自動補回；舊版曾因上限標記已讀的影片也不會自動回播。
 
 摘要固定包含「一句話結論、主要論證、實際用途」，其餘結構與篇幅依每支影片調整；頻道提示僅設定內容側重。接著透過 Gemini Google Search 查證重要論點，附上 API 回傳的對應來源，並與影片原意分開呈現。搜尋失敗或沒有可引用來源時，保留摘要並標示「外部查證未完成」。這會增加 API 用量與處理時間，搜尋費用依 Google 帳戶方案計算。
 
@@ -334,9 +336,11 @@ python src/yt_monitor.py
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN_02` | 空 | YouTube 摘要推播使用的 Telegram Bot Token |
 | `YT_CHANNELS_CONFIG` | `config/yt_channels.json` | YouTube 頻道設定檔路徑 |
-| `YT_MAX_NEW_PER_RUN` | `3` | 頻道未指定上限時，單次最多處理的新影片數 |
+| `YT_MAX_NEW_PER_RUN` | `3` | 頻道未指定上限時，單次最多嘗試的待處理影片數，包含重試；其餘保留 |
 | `YT_SEEN_STATE_FILE` | `data/yt_seen_ids.json` | 已處理影片 ID 的狀態檔路徑 |
 | `YT_PROGRESS_FILE` | `data/yt_progress.json` | 通知、摘要、查證與分段送達進度；自訂路徑需同步調整 workflow 保存清單 |
+| `YT_SCHEDULE_FILE` | `data/yt_schedule.json` | 下次輪流處理的起始頻道；自訂路徑需同步調整 workflow 保存清單 |
+| `YT_RUN_BUDGET_SECONDS` | `1260` | 本輪處理時間上限；需小於 workflow 的 24 分鐘外部停止時間以保留回存時間 |
 | `YT_MAX_SEEN_IDS` | `300` | 每個頻道最多保留的已處理影片 ID 數量 |
 
 ---
