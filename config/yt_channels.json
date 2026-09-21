@@ -24,6 +24,12 @@
   "max_new_per_run": 3
 },
 {
+  "name": "腦哥 Chill塊鏈",
+  "channel_id": "UC1EG67JfgUKaZ4Z_l4euycw",
+  "system_prompt": "聚焦加密貨幣市場、區塊鏈原理與產業事件。說明影片中的知識如何幫助理解市場變化、評估風險或辨識實際應用；保留影片提及的數據、時間尺度與限制，區分事實、主持人觀點及贊助推廣，不把價格預測當成確定結論。",
+  "max_new_per_run": 3
+},
+{
   "name": "Bankless",
   "channel_id": "UCAI9Ld79qaZxp9JzEOwd3aA",
   "system_prompt": "聚焦 ETH、DeFi、機構採用、資金輪動與 Tokenomics。說明影片提及的事件如何影響需求、供給、協議收入或代幣價值捕獲；區分已發生事實、來賓立場與市場敘事，標示影片提及的利益關係，不將產品宣傳當成投資結論。若與行情無直接關聯，明確指出，不牽強連結。",
