@@ -44,7 +44,7 @@ This is a GitHub Actions-driven automation project for tracking and filtering Ji
 - Sends relevant items to Gemini for grading and summary
 - Pushes important updates to Telegram
 - Adds a Telegram Q&A mode with recent context memory
-- Monitors YouTube channel RSS feeds, summarizes new videos into five key points, and pushes them to Telegram
+- Monitors YouTube channel RSS feeds, summarizes new videos into an adaptive summary with external fact-checking, and pushes them to Telegram
 
 ---
 
@@ -97,7 +97,7 @@ Parse videos by channel_id
    ↓
 Deduplicate with data/yt_seen_ids.json
    ↓
-Gemini watches the video and writes five key points
+Gemini watches the video and writes an adaptive summary with external fact-checking
    ↓
 Push the summary and source link to Telegram
 ```
@@ -117,7 +117,9 @@ Example channel configuration:
 ]
 ```
 
-`name` must be unique, and `channel_id` is the YouTube channel ID. `system_prompt` is optional and can customize the summary style for a channel. Deduplication state lives in `data/yt_seen_ids.json`; on GitHub Actions the workflow commits it back to the repository automatically (see "State persistence" below).
+`name` must be unique, and `channel_id` is the YouTube channel ID. `system_prompt` is optional and sets a channel's focus, not a fixed template. Each video gets a conclusion, main arguments, and practical implications, with structure and length adapted to its content. A separate Gemini Google Search request checks key claims and adds API-linked sources; missing sources or search failures are explicitly disclosed while retaining the video summary. Search adds API usage, latency, and any Google plan-dependent search charges.
+
+Long reports are split into multiple Telegram messages. A video is marked seen only after every part is delivered; retrying a partial failure resends the whole report and may repeat earlier parts. Deduplication state lives in `data/yt_seen_ids.json`; on GitHub Actions the workflow commits it back to the repository automatically (see "State persistence" below).
 
 ---
 
