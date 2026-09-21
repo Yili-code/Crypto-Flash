@@ -7,7 +7,7 @@ on:
 
 concurrency:
   group: jin10-monitor
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write   # the run commits data/recent_news.json back to the repository
@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,6 +38,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GEMINI_LIVE_DAILY_REQUESTS: ${{ vars.GEMINI_LIVE_DAILY_REQUESTS }}
+          GEMINI_POLICY_REVISION: ${{ vars.GEMINI_POLICY_REVISION }}
           GEMINI_RECONNECT_DELAY: '30'
           TELEGRAM_BOT_TOKEN_01: ${{ secrets.TELEGRAM_BOT_TOKEN_01 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -51,8 +55,7 @@ jobs:
       # Ingestion and Q&A share live files within this runner.
       - name: Persist recent news context
         if: always()
-        continue-on-error: true
         uses: ./.github/actions/persist-state
         with:
-          paths: data/recent_news.json data/news_archive.json data/event_tracking.json
+          paths: data/recent_news.json data/news_archive.json data/event_tracking.json data/gemini_live_usage.json
           message: "chore(state): update recent news context [skip ci]"

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from unittest.mock import AsyncMock
 
 import pytest
@@ -158,6 +159,8 @@ def test_legacy_seen_videos_are_not_replayed(flow):
 
 
 def test_integrated_api_quota_recovery_across_three_runs(tmp_path, monkeypatch):
+    clock = [time.time()]
+    monkeypatch.setattr(gemini.policy.time, 'time', lambda: clock[0])
     monkeypatch.setattr(yt, 'SEEN_STATE_FILE', tmp_path / 'seen.json')
     monkeypatch.setattr(yt, 'GEMINI_API_KEY', 'test')
     monkeypatch.setattr(gemini, 'GEMINI_API_KEY', 'test')
@@ -175,9 +178,11 @@ def test_integrated_api_quota_recovery_across_three_runs(tmp_path, monkeypatch):
     first = FakeSession([FakeResponse(200, FEED), FakeResponse(429, 'RESOURCE_EXHAUSTED'), FakeResponse(200)])
     record = execute(first)
     assert record['notified'] and not record['summary_completed']
+    clock[0] += 31
     second = FakeSession([FakeResponse(503), response('summary'), FakeResponse(429, 'RESOURCE_EXHAUSTED'), FakeResponse(200)])
     record = execute(second)
     assert record['summary_completed'] and record['summary_delivered'] and not record['research_completed']
+    clock[0] += 31
     third = FakeSession([FakeResponse(503), response('Supported claim', {
         'groundingChunks': [{'web': {'uri': 'https://example.org/data', 'title': 'Original data'}}],
         'groundingSupports': [{'segment': {'text': 'Supported claim'}, 'groundingChunkIndices': [0]}],

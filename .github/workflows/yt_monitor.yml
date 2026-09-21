@@ -40,6 +40,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GEMINI_YOUTUBE_DAILY_REQUESTS: ${{ vars.GEMINI_YOUTUBE_DAILY_REQUESTS }}
+          GEMINI_POLICY_REVISION: ${{ vars.GEMINI_POLICY_REVISION }}
         # Leave five minutes for persistence even when summarization stalls.
         run: |
           set +e
@@ -53,5 +55,5 @@ jobs:
         if: always()
         uses: ./.github/actions/persist-state
         with:
-          paths: data/yt_seen_ids.json data/yt_progress.json
+          paths: data/yt_seen_ids.json data/yt_progress.json data/gemini_youtube_usage.json
           message: "chore(state): update seen YouTube video ids [skip ci]"

@@ -349,7 +349,7 @@ async def gemini_recovery_loop(session: aiohttp.ClientSession) -> None:
             if GEMINI_AVAILABLE:
                 log.info("Gemini is available; summarized flash pushes resumed")
             else:
-                log.warning("Gemini unavailable; flash pushes paused, retrying in %ss", GEMINI_RECONNECT_DELAY)
+                log.warning("Gemini unavailable; pushes paused; local retry eligibility check in %ss", GEMINI_RECONNECT_DELAY)
         await asyncio.sleep(GEMINI_RECONNECT_DELAY)
 
 def remember_news(

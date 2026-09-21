@@ -174,6 +174,7 @@ async def summarize_video(
     summary = await call_gemini(
         session,
         SUMMARY_PROMPT,
+        usage_scope="youtube",
         system_instruction=system_prompt or None,
         extra_parts=[{"file_data": {"file_uri": video_url}}],
         timeout=120,
@@ -186,6 +187,7 @@ async def research_video(session: aiohttp.ClientSession, video_url: str, summary
         session,
         RESEARCH_PROMPT + "\n\n影片：" + video_url + "\n待查證摘要：\n" + summary,
         google_search=True,
+        usage_scope="youtube",
         timeout=90,
     )
 

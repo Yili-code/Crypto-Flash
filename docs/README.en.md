@@ -68,6 +68,12 @@ This is a GitHub Actions-driven automation project for tracking and filtering Ji
 
 ## How it works
 
+Gemini requests are limited to 120/day for YouTube and 600/day shared by flash analysis, Q&A and probes. Local counters reset at 00:00 UTC+8 and count failed/cancelled attempts and retries. Configure `GEMINI_YOUTUBE_DAILY_REQUESTS` / `GEMINI_LIVE_DAILY_REQUESTS` in `.env` or GitHub Actions Variables (`0` pauses, `-1` disables the local cap). These are request budgets, not token, currency or provider quota limits.
+
+Transient failures use persisted exponential cooldowns starting at 30 seconds, capped at one hour, with jitter. Longer provider retry hints take precedence; explicit daily-quota errors conservatively pause at least 24 hours. Google's Pacific-time reset is separate. Calls return immediately during cooldown; monitor iterations or scheduled runs retry when eligible. Pending YouTube work remains saved.
+
+Authentication/configuration errors block attempts until the key/model changes, or `GEMINI_POLICY_REVISION` changes after fixing external account settings. This does not reset daily consumption. Invalid requests block identical payloads only. Each workflow owns its `data/gemini_youtube_usage.json` or `data/gemini_live_usage.json`; corrupt/unwritable state stops calls. Other applications/machines are not counted. Forced termination or remote persistence failure can lose uncommitted counts; this is not a billing hard cap.
+
 ```text
 Jin10 WebSocket → Parse packets → Bounded queue → Keyword matching
    ↓

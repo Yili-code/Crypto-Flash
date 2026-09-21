@@ -74,6 +74,16 @@
 
 ## 工作流程
 
+### Gemini 用量與重試
+
+- 每日以台灣時間 00:00 重置請求次數預算：YouTube 預設 120 次，快訊與問答（含連線檢查）共 600 次。網路請求前先記帳，失敗、取消與重試都計入；冷卻或預算用完時不發請求、不加計次數。這不是 token／金額上限，也不是 Google 帳戶的剩餘配額。
+- 暫時性限流、逾時、連線、5xx 或無效回覆採約 30、60、120 秒逐步延長的等待時間（附少量隨機延遲，最高 1 小時）。`Retry-After` 或 `RetryInfo` 要求更久時遵守較長時間。明確的每日配額錯誤保守暫停至少 24 小時；Google 的 RPD 重置採 Pacific time，與本地預算不同。一般 429 不會一律等到隔天。
+- 冷卻期限保存後立即返回，由快訊恢復迴圈或後續 YouTube 排程在期限後再試，成功後清除連續失敗次數。YouTube 未完成進度會保留。
+- 金鑰／權限或模型／帳戶設定錯誤停止自動重試；無效請求只封鎖相同內容。修正金鑰／模型後自動解除；修正外部帳戶設定後可更改 `GEMINI_POLICY_REVISION` 解除封鎖與冷卻，當日已用次數仍保留。
+- 使用 `.env` 或同名 GitHub Actions Variables 設定 `GEMINI_YOUTUBE_DAILY_REQUESTS`、`GEMINI_LIVE_DAILY_REQUESTS`：`0` 暫停、`-1` 關閉本地次數上限。預設兩個服務合計 720 次／日。
+- 計數、錯誤類別與最早重試時間分別存在 `data/gemini_youtube_usage.json`、`data/gemini_live_usage.json`，各 workflow 只保存自己負責的檔案。檔案損壞或無法寫入時停止請求。這限於本專案配置的單一寫入程序／各 workflow，不涵蓋其他程式或電腦使用同一 API key 的用量。
+- 強制終止或 GitHub 回存失敗可能遺失尚未提交的計數；回存失敗會明確標示 workflow 失敗。此機制不是帳單硬上限。
+
 ```text
 Jin10 WebSocket → 解析封包 → 待處理佇列 → 關鍵字比對
    ↓
