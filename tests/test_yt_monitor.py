@@ -52,6 +52,7 @@ def wired(tmp_path, monkeypatch):
 
     monkeypatch.setattr(yt, "fetch_feed", fake_fetch_feed)
     monkeypatch.setattr(yt, "summarize_video", fake_summarize)
+    monkeypatch.setattr(yt, "research_video", fake_summarize)
     monkeypatch.setattr(yt, "send_telegram_message", fake_send)
     return sent, outcome
 

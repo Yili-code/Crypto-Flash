@@ -1,6 +1,12 @@
 import pytest
 
 import tg
+import yt_monitor
+
+
+@pytest.fixture(autouse=True)
+def _isolated_youtube_progress(tmp_path, monkeypatch):
+    monkeypatch.setattr(yt_monitor, "PROGRESS_FILE", tmp_path / "yt_progress.json")
 
 
 @pytest.fixture(autouse=True)

@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import time
 import xml.etree.ElementTree as ET
 from html import escape as html_escape, unescape
 from pathlib import Path
@@ -20,6 +21,7 @@ log = get_logger("yt-monitor")
 CHANNELS_CONFIG_FILE = Path(os.getenv("YT_CHANNELS_CONFIG", str(BASE_DIR / "config" / "yt_channels.json")))
 DEFAULT_MAX_NEW_PER_RUN = int(os.getenv("YT_MAX_NEW_PER_RUN", "3"))
 SEEN_STATE_FILE = Path(os.getenv("YT_SEEN_STATE_FILE", str(BASE_DIR / "data" / "yt_seen_ids.json")))
+PROGRESS_FILE = Path(os.getenv("YT_PROGRESS_FILE", str(BASE_DIR / "data" / "yt_progress.json")))
 MAX_SEEN_IDS_PER_CHANNEL = int(os.getenv("YT_MAX_SEEN_IDS", "300"))
 
 
@@ -176,16 +178,16 @@ async def summarize_video(
         extra_parts=[{"file_data": {"file_uri": video_url}}],
         timeout=120,
     )
-    if not summary:
-        return None
-    research = await call_gemini(
+    return summary
+
+
+async def research_video(session: aiohttp.ClientSession, video_url: str, summary: str) -> Optional[str]:
+    return await call_gemini(
         session,
         RESEARCH_PROMPT + "\n\n影片：" + video_url + "\n待查證摘要：\n" + summary,
         google_search=True,
         timeout=90,
     )
-    research = research or "外部查證未完成：搜尋失敗或未取得可引用來源；上述影片摘要尚未獲得外部驗證。"
-    return html_escape(summary, quote=False) + "\n\n<b>外部查證與補充</b>\n" + research
 
 
 # ─── 訊息組裝 ───────────────────────────────────────────────────────────────
@@ -200,7 +202,7 @@ def format_message(channel_title: str, title: str, link: str, summary: Optional[
     return (
         f"<b>新影片</b>：{safe_title}\n\n"
         f"{link}\n\n"
-        "（Gemini 摘要失敗，請直接點連結觀看）"
+        "（摘要暫未完成，後續排程會重試並補送；可先點連結觀看）"
     )
 
 
@@ -224,73 +226,175 @@ def split_message(message: str) -> list[str]:
             for i, chunk in enumerate(chunks, 1)]
 
 
+def load_progress() -> dict:
+    if not PROGRESS_FILE.exists():
+        return {}
+    try:
+        state = json.loads(PROGRESS_FILE.read_text(encoding="utf-8"))
+        if not isinstance(state, dict):
+            raise ValueError("progress must be an object")
+        for key, record in state.items():
+            if not isinstance(record, dict):
+                raise ValueError("invalid video record")
+            for field in ("channel_id", "video_id", "channel_title", "title", "link", "summary", "research"):
+                if not isinstance(record.get(field), str):
+                    raise ValueError("invalid video text field")
+            if key != record["channel_id"] + ":" + record["video_id"]:
+                raise ValueError("invalid video identity")
+            for field in ("notified", "summary_completed", "research_completed", "summary_delivered", "research_delivered"):
+                if type(record.get(field)) is not bool:
+                    raise ValueError("invalid video status")
+            if record["summary_completed"] != bool(record["summary"]) or record["research_completed"] != bool(record["research"]):
+                raise ValueError("missing completed output")
+            if record["research_completed"] and not record["summary_completed"]:
+                raise ValueError("research without summary")
+            if record["summary_delivered"] and not (record["summary_completed"] and record["notified"]):
+                raise ValueError("invalid summary receipt")
+            if record["research_delivered"] and not (record["research_completed"] and record["summary_delivered"]):
+                raise ValueError("invalid research receipt")
+            if not isinstance(record.get("last_attempt"), (int, float)):
+                raise ValueError("invalid retry order")
+            if "delivery" not in record:
+                raise ValueError("missing delivery status")
+            delivery = record["delivery"]
+            if delivery is not None:
+                if not isinstance(delivery, dict):
+                    raise ValueError("invalid delivery")
+                parts = delivery.get("parts")
+                cursor = delivery.get("next_part")
+                if not isinstance(parts, list) or not parts or any(not isinstance(x, str) for x in parts):
+                    raise ValueError("invalid message parts")
+                if type(cursor) is not int or not 0 <= cursor <= len(parts):
+                    raise ValueError("invalid delivery cursor")
+                if any(type(delivery.get(f)) is not bool for f in ("summary", "research")):
+                    raise ValueError("invalid delivery status")
+                if delivery["summary"] and not record["summary_completed"]:
+                    raise ValueError("delivery without summary")
+                if delivery["research"] and not record["research_completed"]:
+                    raise ValueError("delivery without research")
+        return state
+    except (OSError, ValueError, TypeError) as exc:
+        raise SeenStateError(f"讀取影片進度失敗：{exc}") from exc
+
+
+def save_progress(state: dict) -> None:
+    # Never prune unfinished work. Retain a bounded history of completed videos.
+    complete = [key for key, r in state.items() if r["research_delivered"] and r.get("delivery") is None]
+    discarded = set(complete[:-MAX_SEEN_IDS_PER_CHANNEL])
+    retained = {key: value for key, value in state.items() if key not in discarded}
+    try:
+        PROGRESS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        temporary = PROGRESS_FILE.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(retained, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(PROGRESS_FILE)
+    except OSError as exc:
+        raise SeenStateError(f"寫入影片進度失敗：{exc}") from exc
+
+
+async def deliver_progress(session, record: dict, progress: dict) -> bool:
+    delivery = record["delivery"]
+    for index in range(delivery["next_part"], len(delivery["parts"])):
+        if not await send_telegram_message(session, TELEGRAM_CHAT_ID, delivery["parts"][index], TELEGRAM_BOT_TOKEN_02):
+            log.warning("[%s] 第 %d 段發送失敗，保留進度待重試", record["video_id"], index + 1)
+            return False
+        delivery["next_part"] = index + 1
+        save_progress(progress)
+    record["notified"] = True
+    record["summary_delivered"] |= delivery["summary"]
+    record["research_delivered"] |= delivery["research"]
+    record["delivery"] = None
+    save_progress(progress)
+    return True
+
+
+async def process_video(session, cfg: dict, record: dict, progress: dict) -> None:
+    # Finish persisted messages before changing any generated content.
+    if record["delivery"] is not None:
+        await deliver_progress(session, record, progress)
+        return
+    if not record["summary_completed"]:
+        summary = await summarize_video(session, record["link"], cfg["system_prompt"])
+        if summary:
+            record["summary"] = summary
+            record["summary_completed"] = True
+            save_progress(progress)
+        else:
+            log.warning("[%s] 摘要尚未完成，保留待重試", record["video_id"])
+    if record["summary_completed"] and not record["research_completed"]:
+        research = await research_video(session, record["link"], record["summary"])
+        if research:
+            record["research"] = research
+            record["research_completed"] = True
+            save_progress(progress)
+        else:
+            log.warning("[%s] 查證尚未完成，保留摘要待重試", record["video_id"])
+    include_summary = record["summary_completed"] and not record["summary_delivered"]
+    include_research = record["research_completed"] and not record["research_delivered"]
+    if record["notified"] and not include_summary and not include_research:
+        return
+    sections = []
+    if include_summary:
+        sections.append(html_escape(record["summary"], quote=False))
+        if not record["research_completed"]:
+            sections.append("外部查證未完成，後續排程會重試並補送結果。")
+    if include_research:
+        sections.append("<b>外部查證與補充</b>\n" + record["research"])
+    message = format_message(record["channel_title"], record["title"], record["link"], "\n\n".join(sections) or None)
+    record["delivery"] = {"parts": split_message(message), "next_part": 0,
+                          "summary": include_summary, "research": include_research}
+    save_progress(progress)
+    await deliver_progress(session, record, progress)
+
+
 async def process_channel(session: aiohttp.ClientSession, cfg: dict, seen_state: dict[str, list[str]]) -> None:
     name = cfg["name"]
-
-    rss_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={cfg['channel_id']}"
-    xml_text = await fetch_feed(session, rss_url)
-    if xml_text is None:
-        return
-
-    try:
-        channel_title, entries = parse_feed(xml_text)
-    except ET.ParseError as exc:
-        log.warning("[%s] RSS 解析失敗：%s", name, exc)
-        return
-
-    if not entries:
-        log.info("[%s] RSS 目前沒有任何影片。", name)
-        return
-
+    progress = load_progress()
+    xml_text = await fetch_feed(session, f"https://www.youtube.com/feeds/videos.xml?channel_id={cfg['channel_id']}")
+    channel_title, entries = name, []
+    if xml_text is not None:
+        try:
+            channel_title, entries = parse_feed(xml_text)
+        except ET.ParseError as exc:
+            log.warning("[%s] RSS 解析失敗：%s", name, exc)
+    channel_records = [r for r in progress.values() if r["channel_id"] == cfg["channel_id"]]
     seen_ids = seen_state.get(name, [])
-
-    if not seen_ids:
-        seen_state[name] = [e["video_id"] for e in entries]
+    if not seen_ids and not channel_records and entries:
+        seen_state[name] = list(dict.fromkeys(e["video_id"] for e in entries))
         save_seen_state(seen_state)
-        log.info("[%s] 初始化完成，已預熱去重 %d 部影片，不會為既有影片發送通知。", name, len(entries))
         return
-
     seen_set = set(seen_ids)
     new_entries = []
     for entry in entries:
-        if entry["video_id"] not in seen_set:
+        key = cfg["channel_id"] + ":" + entry["video_id"]
+        if entry["video_id"] not in seen_set and key not in progress:
             new_entries.append(entry)
             seen_set.add(entry["video_id"])
-
-    if not new_entries:
-        log.info("[%s] 沒有偵測到新影片。", name)
-        return
-
-    max_new = cfg["max_new_per_run"]
-    if len(new_entries) > max_new:
-        skipped = new_entries[:-max_new]
-        log.warning("[%s] 一次偵測到 %d 部新影片，超過上限 %d，只處理最新的 %d 部，其餘標記為已讀不推播。",
-                    name, len(new_entries), max_new, max_new)
-        seen_ids.extend(e["video_id"] for e in skipped)
+    # Preserve the existing new-video cap; already-pending work is never discarded.
+    limit = cfg["max_new_per_run"]
+    if len(new_entries) > limit:
+        log.warning("[%s] %d 部新片超過上限 %d，依既有設定略過較舊新片", name, len(new_entries), limit)
+        seen_ids.extend(e["video_id"] for e in new_entries[:-limit])
         seen_state[name] = seen_ids
         save_seen_state(seen_state)
-        new_entries = new_entries[-max_new:]
-
+        new_entries = new_entries[-limit:]
     for entry in new_entries:
-        log.info("[%s] 發現新影片：%s", name, entry["title"][:60])
-        summary = await summarize_video(session, entry["link"], cfg["system_prompt"])
-        if summary is None:
-            log.warning("[%s] Gemini 摘要失敗，改用純連結推播：%s", name, entry["title"][:60])
-        msg = format_message(channel_title, entry["title"], entry["link"], summary)
-        ok = True
-        for part in split_message(msg):
-            if not await send_telegram_message(session, TELEGRAM_CHAT_ID, part, TELEGRAM_BOT_TOKEN_02):
-                ok = False
-                break
-        log.info("[%s] Telegram 發送%s：%s", name, "成功" if ok else "失敗", entry["title"][:60])
-        if not ok:
-            # 沒推播出去就不要標記為已讀，否則這部影片會被永久跳過；保留未讀，下次執行會重試。
-            log.warning("[%s] 推播失敗，保留為未讀：%s", name, entry["title"][:60])
-            continue
-        # 每成功推播一部就存一次，避免中途失敗時下次重新執行又重複推播已經發過的影片。
-        seen_ids.append(entry["video_id"])
-        seen_state[name] = seen_ids
-        save_seen_state(seen_state)
+        key = cfg["channel_id"] + ":" + entry["video_id"]
+        progress[key] = {**entry, "channel_id": cfg["channel_id"], "channel_title": channel_title,
+                         "notified": False, "summary_completed": False, "research_completed": False,
+                         "summary_delivered": False, "research_delivered": False,
+                         "summary": "", "research": "", "delivery": None, "last_attempt": 0}
+    save_progress(progress)
+    pending = [r for r in progress.values() if r["channel_id"] == cfg["channel_id"] and not r["research_delivered"]]
+    pending.sort(key=lambda r: r["last_attempt"])
+    log.info("[%s] 待完成 %d 部，本輪最多處理 %d 部", name, len(pending), limit)
+    for record in pending[:limit]:
+        record["last_attempt"] = time.time()
+        save_progress(progress)
+        await process_video(session, cfg, record, progress)
+        if record["notified"] and record["video_id"] not in seen_ids:
+            seen_ids.append(record["video_id"])
+            seen_state[name] = seen_ids
+            save_seen_state(seen_state)
 
 
 # ─── 主流程（跑一次就結束，依序處理每個頻道） ────────────────────────────────
@@ -306,6 +410,7 @@ async def main() -> None:
     seen_state = load_seen_state()
     # Verify persistence before spending on summaries or delivering anything.
     save_seen_state(seen_state)
+    save_progress(load_progress())
     async with aiohttp.ClientSession() as session:
         if not await check_chat_access(session, TELEGRAM_CHAT_ID, TELEGRAM_BOT_TOKEN_02):
             log.error("Telegram 推播目標不可用，先跳過本次執行（避免白跑 Gemini 影片摘要）。")

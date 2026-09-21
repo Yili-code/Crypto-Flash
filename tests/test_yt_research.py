@@ -43,14 +43,15 @@ def test_truncated_response_is_not_delivered(monkeypatch):
     assert asyncio.run(gemini.call_gemini(session, 'summarize')) is None
 
 
-def test_research_failure_preserves_summary_and_discloses_gap(monkeypatch):
+def test_video_summary_is_separate_from_research(monkeypatch):
     monkeypatch.setattr(yt, 'GEMINI_API_KEY', 'test')
     call = AsyncMock(side_effect=['影片論點 < 3', None])
     monkeypatch.setattr(yt, 'call_gemini', call)
     result = asyncio.run(yt.summarize_video(None, 'https://youtu.be/abc', 'channel focus'))
-    assert '影片論點 &lt; 3' in result
-    assert '外部查證未完成' in result
+    assert result == '影片論點 < 3'
     assert call.call_args_list[0].kwargs['system_instruction'] == 'channel focus'
+    assert call.await_count == 1
+    assert asyncio.run(yt.research_video(None, 'https://youtu.be/abc', result)) is None
     assert call.call_args_list[1].kwargs['google_search'] is True
 
 
@@ -75,6 +76,7 @@ def test_partial_delivery_stays_unread(tmp_path, monkeypatch):
     monkeypatch.setattr(yt, 'SEEN_STATE_FILE', tmp_path / 'seen.json')
     monkeypatch.setattr(yt, 'fetch_feed', AsyncMock(return_value=FEED))
     monkeypatch.setattr(yt, 'summarize_video', AsyncMock(return_value='文' * 8000))
+    monkeypatch.setattr(yt, 'research_video', AsyncMock(return_value='research'))
     send = AsyncMock(side_effect=[True, False])
     monkeypatch.setattr(yt, 'send_telegram_message', send)
     state = {'c': ['older']}

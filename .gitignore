@@ -21,6 +21,7 @@ data/
 !data/
 !data/recent_news.json
 !data/yt_seen_ids.json
+!data/yt_progress.json
 !data/news_archive.json
 !data/daily_digest_state.json
 !data/economic_calendar_state.json

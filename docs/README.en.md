@@ -119,7 +119,9 @@ Example channel configuration:
 
 `name` must be unique, and `channel_id` is the YouTube channel ID. `system_prompt` is optional and sets a channel's focus, not a fixed template. Each video gets a conclusion, main arguments, and practical implications, with structure and length adapted to its content. A separate Gemini Google Search request checks key claims and adds API-linked sources; missing sources or search failures are explicitly disclosed while retaining the video summary. Search adds API usage, latency, and any Google plan-dependent search charges.
 
-Long reports are split into multiple Telegram messages. A video is marked seen only after every part is delivered; retrying a partial failure resends the whole report and may repeat earlier parts. Deduplication state lives in `data/yt_seen_ids.json`; on GitHub Actions the workflow commits it back to the repository automatically (see "State persistence" below).
+`data/yt_progress.json` separately records notification, summary completion, research completion, generated content, and delivery receipts. A failed summary sends a link once and remains pending. Failed research preserves and delivers the summary; later runs send only the research supplement. Pending videos resume even after leaving RSS or when feed fetching fails. Oldest-attempted pending work runs first within the per-channel limit. Completed steps are reused.
+
+Long reports are split into multiple Telegram messages with a saved cursor after each successful part. A crash between Telegram acceptance and durable local/remote persistence can still cause duplicates. Pending records are never pruned; the latest 300 completed records are retained (using `YT_MAX_SEEN_IDS`). Existing `data/yt_seen_ids.json` entries remain deduplicated without historical replay; old failures cannot be inferred or backfilled automatically. GitHub Actions persists both files.
 
 ---
 
@@ -318,6 +320,7 @@ If the Gemini startup check or a summary request fails, flash pushes pause and a
 | `YT_CHANNELS_CONFIG` | `config/yt_channels.json` | Path to the YouTube channel configuration |
 | `YT_MAX_NEW_PER_RUN` | `3` | Maximum new videos per run when a channel does not set its own limit |
 | `YT_SEEN_STATE_FILE` | `data/yt_seen_ids.json` | Path to the processed-video state file |
+| `YT_PROGRESS_FILE` | `data/yt_progress.json` | Notification, summary, research and delivery progress; custom paths also require updating workflow persistence |
 | `YT_MAX_SEEN_IDS` | `300` | Maximum processed video IDs retained per channel |
 
 ---

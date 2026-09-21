@@ -53,5 +53,5 @@ jobs:
         if: always()
         uses: ./.github/actions/persist-state
         with:
-          paths: data/yt_seen_ids.json
+          paths: data/yt_seen_ids.json data/yt_progress.json
           message: "chore(state): update seen YouTube video ids [skip ci]"
