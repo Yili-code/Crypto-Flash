@@ -66,7 +66,7 @@ def select_events(payload: object, day: date) -> list[tuple[datetime, str]]:
 def render_messages(events: list[tuple[datetime, str]], day: date) -> list[str]:
     last_day = day + timedelta(days=WINDOW_DAYS - 1)
     end_label = last_day.strftime("%m/%d" if day.year == last_day.year else "%Y/%m/%d")
-    header = '<b><a href="https://www.forexfactory.com/calendar">CPI · 非農 · FOMC</a></b>\n'
+    header = '<b><a href="https://www.forexfactory.com/calendar">Event Reminder</a></b>\n'
     header += f"{day:%Y/%m/%d}–{end_label} · 台灣時間\n"
     footer = ''
     if not events:
@@ -108,7 +108,7 @@ async def main(*, dry_run: bool = False) -> None:
             messages = render_messages(select_events(await fetch_calendar(session), day), day)
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, TypeError) as exc:
             last_day = day + timedelta(days=WINDOW_DAYS - 1)
-            notice = (f"<b>CPI · 非農 · FOMC</b>\n{day:%Y/%m/%d}–{last_day:%Y/%m/%d} · 台灣時間\n\n"
+            notice = (f"<b>Event Reminder</b>\n{day:%Y/%m/%d}–{last_day:%Y/%m/%d} · 台灣時間\n\n"
                       "資料不完整或暫時無法取得。\n不能判定是否有事件。")
             if dry_run:
                 print(notice)
