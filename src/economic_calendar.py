@@ -53,17 +53,18 @@ def select_events(payload: object, day: date) -> list[tuple[datetime, str]]:
 
 def render_messages(events: list[tuple[datetime, str]], day: date) -> list[str]:
     last_day = day + timedelta(days=WINDOW_DAYS - 1)
-    header = f"<b>未來三天高影響數據／事件｜{day.isoformat()}～{last_day.isoformat()}</b>\n"
-    header += "範圍：美元 High impact（含 Fed 政策事件）\n以台灣時間今天、明天、後天為準，含今日已發布事件。\n"
-    footer = '\n來源：<a href="https://www.forexfactory.com/calendar">Forex Factory</a>；時間可能調整。'
+    header = "<b>加密市場｜三日宏觀提醒</b>\n"
+    header += f"{day:%Y/%m/%d} – {last_day:%m/%d}｜台灣時間\n"
+    footer = '\n<a href="https://www.forexfactory.com/calendar">Forex Factory</a> · 僅涵蓋美元高影響事件'
     if not events:
-        return [header + "\n這三天暫無符合上述範圍的已排定重要事件。\n仍可能有突發消息；無排定事件不代表市場不會波動。\n" + footer]
+        return [header + "\n這三天暫無高影響宏觀事件。\n仍需留意幣圈消息與突發風險。\n" + footer]
+    header += "含今日已發布事件\n"
     messages = []
     body = header
     for when, title in events:
         row = (f"\n<b>{escape(title)}</b>\n"
-               f"國際時間 UTC：{when:%Y-%m-%d %H:%M}\n"
-               f"台灣時間 UTC+8：{when.astimezone(TAIPEI):%Y-%m-%d %H:%M}\n")
+               f"台灣 {when.astimezone(TAIPEI):%Y-%m-%d %H:%M}\n"
+               f"UTC  {when:%Y-%m-%d %H:%M}\n")
         if len((header + row + footer).encode("utf-16-le")) // 2 > 4000:
             raise ValueError("Calendar title exceeds message limit")
         if len((body + row + footer).encode("utf-16-le")) // 2 > 4000:
@@ -97,8 +98,8 @@ async def main(*, dry_run: bool = False) -> None:
             messages = render_messages(select_events(await fetch_calendar(session), day), day)
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, TypeError) as exc:
             last_day = day + timedelta(days=WINDOW_DAYS - 1)
-            notice = (f"未來三天高影響數據通知｜{day.isoformat()}～{last_day.isoformat()}\n"
-                      "資料暫時無法確認或未涵蓋完整三天（可能跨週），不能判定這三天是否有高影響數據。")
+            notice = (f"<b>加密市場｜三日宏觀提醒</b>\n{day:%Y/%m/%d} – {last_day:%m/%d}｜台灣時間\n\n"
+                      "暫時無法確認完整三天的資料。\n不能判定是否有宏觀事件，請稍後再查。")
             if dry_run:
                 print(notice)
             else:

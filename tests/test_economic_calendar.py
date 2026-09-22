@@ -36,10 +36,10 @@ def test_winter_offset_and_midnight_boundaries():
 def test_no_events_explains_dates_scope_and_meaning():
     text = ec.render_messages(ec.select_events([entry(impact="Low")], date(2026, 9, 16)),
                               date(2026, 9, 16))[0]
-    assert "2026-09-16～2026-09-18" in text
-    assert "美元 High impact" in text
+    assert "2026/09/16 – 09/18" in text
+    assert "美元高影響事件" in text
     assert "這三天暫無" in text
-    assert "突發消息" in text
+    assert "幣圈消息與突發風險" in text
     assert "Forex Factory" in text
 
 
