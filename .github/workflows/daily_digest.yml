@@ -27,6 +27,10 @@ jobs:
         run: pip install -r requirements.txt
       - name: Send previous day's digest
         env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GEMINI_POLICY_REVISION: ${{ vars.GEMINI_POLICY_REVISION }}
+          GEMINI_DIGEST_DAILY_REQUESTS: ${{ vars.GEMINI_DIGEST_DAILY_REQUESTS }}
           TELEGRAM_BOT_TOKEN_01: ${{ secrets.TELEGRAM_BOT_TOKEN_01 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python src/daily_digest.py
@@ -34,5 +38,5 @@ jobs:
         if: always()
         uses: ./.github/actions/persist-state
         with:
-          paths: data/daily_digest_state.json
+          paths: data/daily_digest_state.json data/gemini_digest_usage.json
           message: "chore(state): record daily digest delivery [skip ci]"

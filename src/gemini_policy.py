@@ -13,7 +13,7 @@ from pathlib import Path
 from common import BASE_DIR
 
 TAIPEI = timezone(timedelta(hours=8))
-DEFAULT_LIMITS = {"youtube": 120, "live": 600}
+DEFAULT_LIMITS = {"youtube": 120, "live": 600, "digest": 10}
 
 
 class PolicyStateError(RuntimeError):

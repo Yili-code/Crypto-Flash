@@ -9,7 +9,7 @@ import aiohttp
 from common import get_logger, load_recent_news
 from gemini import GEMINI_API_KEY, call_gemini
 from event_tracking import EVENT_COMMANDS, EventReply, EventStateError, acknowledge_updates, event_command_reply
-from news_commands import local_command_reply, parse_command
+from news_commands import digest_command_reply, local_command_reply, parse_command
 from tg import (
     TELEGRAM_API,
     TELEGRAM_BOT_TOKEN_01,
@@ -98,6 +98,9 @@ def extract_question(text: str, bot_username: str, chat_type: str) -> Optional[s
 
 
 async def build_reply(session: aiohttp.ClientSession, text: str, bot_username: str, chat_type: str) -> Optional[str]:
+    digest = await digest_command_reply(session, text, bot_username)
+    if digest is not None:
+        return digest
     reply = local_command_reply(text, bot_username)
     if reply is not None:
         return reply

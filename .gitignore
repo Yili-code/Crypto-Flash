@@ -25,6 +25,7 @@ data/
 !data/yt_schedule.json
 !data/gemini_youtube_usage.json
 !data/gemini_live_usage.json
+!data/gemini_digest_usage.json
 !data/news_archive.json
 !data/daily_digest_state.json
 !data/economic_calendar_state.json

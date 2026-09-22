@@ -1,4 +1,4 @@
-"""On-demand queries over the saved news context; no network or model calls."""
+"""Saved-news queries and asynchronous AI digest routing."""
 
 import math
 import re
@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from html import escape, unescape
 
 from common import CONTEXT_MAX_AGE_SEC, TIER_LEVELS, load_recent_news
-from daily_digest import build_digest, previous_day
+from daily_digest import DigestUnavailable, FAILURE_NOTICE, build_digest, previous_day
 from news_archive import load_archive
 
 DISPLAY_TZ = timezone(timedelta(hours=8))
@@ -21,7 +21,7 @@ HELP_TEXT = """<b>Crypto Flash 指令</b>
 /important — 查看 HIGH、CRITICAL 快訊摘要
 /important 10 — 最多顯示 10 則重要快訊
 /status — 查看新聞資料筆數與新鮮度
-/digest — 昨日重點，依重要性排序
+/digest — 昨日 AI 重點，30 秒掌握大事
 /digest today — 今日截至目前的重點
 /digest 2026-09-09 — 指定日期（限保存資料）
 /track BTC — 追蹤關鍵字的新進展
@@ -130,17 +130,6 @@ def local_command_reply(text: str, bot_username: str) -> str | None:
     name, args = command
     if name in {"start", "help"}:
         return HELP_TEXT
-    if name == "digest":
-        if not args:
-            day = previous_day()
-        elif args == "today":
-            day = datetime.now(DISPLAY_TZ).date()
-        else:
-            try:
-                day = datetime.strptime(args, "%Y-%m-%d").date()
-            except ValueError:
-                return "用法：/digest、/digest today 或 /digest YYYY-MM-DD。"
-        return build_digest(day)
     if name not in {"news", "search", "important", "status"}:
         return None
     limit = 5
@@ -178,3 +167,25 @@ def local_command_reply(text: str, bot_username: str) -> str | None:
         items = [item for item in items if item["tier"] in ("HIGH", "CRITICAL")]
         return _render_important(items, limit)
     return _render_results(items, "近期快訊", limit)
+
+
+async def digest_command_reply(session, text: str, bot_username: str) -> str | None:
+    command = parse_command(text, bot_username)
+    if command is None:
+        return None
+    name, args = command
+    if name == "digest":
+        if not args:
+            day = previous_day()
+        elif args == "today":
+            day = datetime.now(DISPLAY_TZ).date()
+        else:
+            try:
+                day = datetime.strptime(args, "%Y-%m-%d").date()
+            except ValueError:
+                return "用法：/digest、/digest today 或 /digest YYYY-MM-DD。"
+        try:
+            return await build_digest(session, day)
+        except DigestUnavailable:
+            return FAILURE_NOTICE
+    return None

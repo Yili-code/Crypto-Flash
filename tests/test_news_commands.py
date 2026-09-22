@@ -126,12 +126,21 @@ def test_ask_still_uses_gemini(monkeypatch):
 
 
 def test_digest_date_routing(monkeypatch):
-    monkeypatch.setattr(nc, "build_digest", lambda day: day.isoformat())
-    assert nc.local_command_reply("/digest 2026-09-09", "bot") == "2026-09-09"
-    assert "用法" in nc.local_command_reply("/digest 2026-02-30", "bot")
-    assert nc.local_command_reply("/digest@other", "bot") is None
-    assert nc.local_command_reply("/digest", "bot") == nc.previous_day().isoformat()
-    assert nc.local_command_reply("/digest today", "bot") == nc.datetime.now(nc.DISPLAY_TZ).date().isoformat()
+    monkeypatch.setattr(nc, "build_digest", AsyncMock(side_effect=lambda session, day: day.isoformat()))
+    assert asyncio.run(nc.digest_command_reply(None, "/digest 2026-09-09", "bot")) == "2026-09-09"
+    assert "用法" in asyncio.run(nc.digest_command_reply(None, "/digest 2026-02-30", "bot"))
+    assert asyncio.run(nc.digest_command_reply(None, "/digest@other", "bot")) is None
+    assert asyncio.run(nc.digest_command_reply(None, "/digest", "bot")) == nc.previous_day().isoformat()
+    assert asyncio.run(nc.digest_command_reply(None, "/digest today", "bot")) == nc.datetime.now(nc.DISPLAY_TZ).date().isoformat()
+
+
+def test_digest_uses_ai_through_assistant_and_reports_failure(monkeypatch):
+    model = AsyncMock(return_value="30 秒摘要")
+    monkeypatch.setattr(nc, "build_digest", model)
+    assert asyncio.run(qa.build_reply(None, "/digest@bot today", "bot", "group")) == "30 秒摘要"
+    model.assert_awaited_once()
+    model.side_effect = nc.DigestUnavailable
+    assert asyncio.run(qa.build_reply(None, "/digest", "bot", "group")) == nc.FAILURE_NOTICE
 
 
 def test_listener_keeps_chat_restriction_for_new_commands(news, monkeypatch):
