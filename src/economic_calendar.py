@@ -12,6 +12,7 @@ from common import BASE_DIR, get_logger
 from tg import TELEGRAM_CHAT_ID, send_telegram_message
 
 TAIPEI = timezone(timedelta(hours=8))
+WINDOW_DAYS = 3
 CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
 STATE_FILE = BASE_DIR / "data" / "economic_calendar_state.json"
 log = get_logger("economic-calendar")
@@ -34,28 +35,29 @@ def select_events(payload: object, day: date) -> list[tuple[datetime, str]]:
             raise ValueError("Calendar timestamp has no timezone")
         source_day = when.date()
         weeks.add(source_day - timedelta(days=(source_day.weekday() + 1) % 7))
-        if row["country"] == "USD" and row["impact"] == "High" and when.astimezone(TAIPEI).date() == day:
+        if (row["country"] == "USD" and row["impact"] == "High"
+                and day <= when.astimezone(TAIPEI).date() < day + timedelta(days=WINDOW_DAYS)):
             events.add((when.astimezone(timezone.utc), row["title"].strip()))
     if len(weeks) != 1:
         raise ValueError("Calendar feed spans unexpected weeks")
     week_start = next(iter(weeks))
-    # A Sunday Taiwan day overlaps two source weeks. Refuse to declare no events
-    # unless the feed covers the full day; use a visible unavailable notice instead.
+    # Refuse to declare no events unless the feed covers the full Taiwan window.
     source_tz = datetime.fromisoformat(payload[0]["date"]).tzinfo
     start = datetime.combine(day, datetime.min.time(), TAIPEI).astimezone(source_tz).date()
-    end = (datetime.combine(day + timedelta(days=1), datetime.min.time(), TAIPEI)
+    end = (datetime.combine(day + timedelta(days=WINDOW_DAYS), datetime.min.time(), TAIPEI)
            - timedelta(microseconds=1)).astimezone(source_tz).date()
     if not (week_start <= start <= end < week_start + timedelta(days=7)):
-        raise ValueError("Calendar feed does not cover the entire Taiwan day")
+        raise ValueError("Calendar feed does not cover the entire three-day Taiwan window")
     return sorted(events)
 
 
 def render_messages(events: list[tuple[datetime, str]], day: date) -> list[str]:
-    if not events:
-        return ["無"]
-    header = f"<b>今日高影響數據／事件｜{day.isoformat()}</b>\n"
-    header += "範圍：美元 High impact（含 Fed 政策事件）\n以台灣今日 00:00–24:00 為準，含早上已發布事件。\n"
+    last_day = day + timedelta(days=WINDOW_DAYS - 1)
+    header = f"<b>未來三天高影響數據／事件｜{day.isoformat()}～{last_day.isoformat()}</b>\n"
+    header += "範圍：美元 High impact（含 Fed 政策事件）\n以台灣時間今天、明天、後天為準，含今日已發布事件。\n"
     footer = '\n來源：<a href="https://www.forexfactory.com/calendar">Forex Factory</a>；時間可能調整。'
+    if not events:
+        return [header + "\n這三天暫無符合上述範圍的已排定重要事件。\n仍可能有突發消息；無排定事件不代表市場不會波動。\n" + footer]
     messages = []
     body = header
     for when, title in events:
@@ -94,7 +96,9 @@ async def main(*, dry_run: bool = False) -> None:
         try:
             messages = render_messages(select_events(await fetch_calendar(session), day), day)
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, TypeError) as exc:
-            notice = f"高影響數據通知｜{day.isoformat()}\n資料暫時無法確認，不能判定今日是否有高影響數據。"
+            last_day = day + timedelta(days=WINDOW_DAYS - 1)
+            notice = (f"未來三天高影響數據通知｜{day.isoformat()}～{last_day.isoformat()}\n"
+                      "資料暫時無法確認或未涵蓋完整三天（可能跨週），不能判定這三天是否有高影響數據。")
             if dry_run:
                 print(notice)
             else:

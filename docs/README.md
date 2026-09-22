@@ -58,7 +58,7 @@
 - YouTube 新影片監控與摘要：`src/yt_monitor.py`
 - 新聞查詢與狀態：`src/news_commands.py`，支援 `/news`、`/search`、`/important`、`/status`
 - 每日重點：`src/daily_digest.py`，支援 `/digest` 查詢與每日 08:15（UTC+8）推播
-- 當日經濟日曆：獨立排程每日 08:00（台灣時間）通知美元 High impact 數據／Fed 政策事件，列出名稱、UTC 與台灣完整日期時間；無符合事件時僅傳「無」。
+- 三天經濟日曆：獨立排程每日 08:00（台灣時間）通知美元 High impact 數據／Fed 政策事件，列出名稱、UTC 與台灣完整日期時間；涵蓋今天、明天、後天；無符合事件時明確顯示日期範圍、篩選條件及暫無已排定重要事件的提示。
 
 - 事件追蹤：`src/event_tracking.py`，支援主題訂閱、時間線與未讀進展
 - 歷史新聞保存：`src/news_archive.py`，供日報與事件追蹤共用
@@ -66,9 +66,9 @@
 - 共享近期新聞上下文：`data/recent_news.json`
 - GitHub Actions 自動執行：Jin10 每 6 小時一次，YouTube 每 30 分鐘一次，皆支援手動觸發
 
-經濟日曆使用 Forex Factory 的公開每週 JSON，不呼叫 Gemini。以台灣當天 00:00–24:00 篩選，包含 08:00 前已發生事件，不包含翌日凌晨。High impact 是來源的美元事件分級，並非涵蓋所有加密貨幣風險。可用 `python src/economic_calendar.py --dry-run` 讀取真實來源並預覽，不發送訊息。
+經濟日曆使用 Forex Factory 的公開每週 JSON，不呼叫 Gemini。以台灣今天 00:00 至大後天 00:00（不含）篩選，共三個日曆日，包含今日 08:00 前已發生事件。High impact 是來源的美元事件分級，並非涵蓋所有加密貨幣風險。可用 `python src/economic_calendar.py --dry-run` 讀取真實來源並預覽，不發送訊息。
 
-排程檔為 `.github/workflows/economic_calendar.yml`，使用既有 Telegram secrets，合併／推送至 GitHub 預設分支才會啟用。GitHub Actions 可能延遲執行，無法保證準點送達。若抓取失敗、來源過期或跨週資料不足（尤其台灣週日），會通知「資料暫時無法確認」，不會誤報「無」。成功後獨立保存當日送達狀態；發送成功但狀態回存失敗時，重跑仍可能重複通知。
+排程檔為 `.github/workflows/economic_calendar.yml`，使用既有 Telegram secrets，合併／推送至 GitHub 預設分支才會啟用。GitHub Actions 可能延遲執行，無法保證準點送達。若抓取失敗、來源過期或跨週資料不足（三天範圍跨越來源週界時），會通知「資料暫時無法確認」，不會誤報沒有事件。無排定事件也不代表沒有突發消息或市場波動。成功後獨立保存當日送達狀態；發送成功但狀態回存失敗時，重跑仍可能重複通知。
 
 ---
 

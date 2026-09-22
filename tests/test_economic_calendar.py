@@ -17,7 +17,7 @@ def test_taiwan_day_filter_sort_deduplicate_and_utc_rollover():
             entry("2026-09-16T14:00:00-04:00", "Tomorrow"),
             entry(country="GBP"), entry(impact="Low")]
     events = ec.select_events(rows, date(2026, 9, 16))
-    assert [title for _, title in events] == ["FOMC", "CPI"]
+    assert [title for _, title in events] == ["FOMC", "CPI", "Tomorrow"]
     text = ec.render_messages(events, date(2026, 9, 16))[0]
     assert "2026-09-15 18:00" in text
     assert "2026-09-16 02:00" in text
@@ -28,14 +28,29 @@ def test_taiwan_day_filter_sort_deduplicate_and_utc_rollover():
 def test_winter_offset_and_midnight_boundaries():
     rows = [entry("2026-01-13T10:59:59-05:00", "before"),
             entry("2026-01-13T11:00:00-05:00", "start"),
-            entry("2026-01-14T10:59:59-05:00", "end"),
-            entry("2026-01-14T11:00:00-05:00", "after")]
+            entry("2026-01-16T10:59:59-05:00", "end"),
+            entry("2026-01-16T11:00:00-05:00", "after")]
     assert [name for _, name in ec.select_events(rows, date(2026, 1, 14))] == ["start", "end"]
 
 
-def test_no_events_is_exactly_none():
-    assert ec.render_messages(ec.select_events([entry(impact="Low")], date(2026, 9, 16)),
-                              date(2026, 9, 16)) == ["無"]
+def test_no_events_explains_dates_scope_and_meaning():
+    text = ec.render_messages(ec.select_events([entry(impact="Low")], date(2026, 9, 16)),
+                              date(2026, 9, 16))[0]
+    assert "2026-09-16～2026-09-18" in text
+    assert "美元 High impact" in text
+    assert "這三天暫無" in text
+    assert "突發消息" in text
+    assert "Forex Factory" in text
+
+
+def test_three_day_summer_boundaries():
+    rows = [entry("2026-09-15T11:59:59-04:00", "before"),
+            entry("2026-09-15T12:00:00-04:00", "today"),
+            entry("2026-09-16T12:00:00-04:00", "tomorrow"),
+            entry("2026-09-18T11:59:59-04:00", "last"),
+            entry("2026-09-18T12:00:00-04:00", "outside")]
+    assert [name for _, name in ec.select_events(rows, date(2026, 9, 16))] == [
+        "today", "tomorrow", "last"]
 
 
 @pytest.mark.parametrize("rows", [[], {}, [None], [dict(title="CPI")],
@@ -45,7 +60,8 @@ def test_bad_feed_never_means_no_events(rows):
         ec.select_events(rows, date(2026, 9, 16))
 
 
-@pytest.mark.parametrize("day", [date(2026, 9, 23), date(2026, 9, 13), date(2026, 9, 20)])
+@pytest.mark.parametrize("day", [date(2026, 9, 23), date(2026, 9, 13), date(2026, 9, 20),
+                                 date(2026, 9, 18), date(2026, 9, 19)])
 def test_stale_or_partial_week_rejected(day):
     with pytest.raises(ValueError, match="cover"):
         ec.select_events([entry()], day)
@@ -75,7 +91,7 @@ def test_success_saved_and_rerun_skipped(delivery):
     assert json.loads(ec.STATE_FILE.read_text())["last_sent_date"] == datetime.now(ec.TAIPEI).date().isoformat()
     asyncio.run(ec.main())
     delivery.assert_awaited_once()
-    assert delivery.call_args.args[2] == "無"
+    assert "這三天暫無" in delivery.call_args.args[2]
 
 
 def test_send_failure_does_not_save(delivery):
@@ -97,7 +113,7 @@ def test_dry_run_does_not_send_or_save(delivery, capsys):
     asyncio.run(ec.main(dry_run=True))
     delivery.assert_not_awaited()
     assert not ec.STATE_FILE.exists()
-    assert capsys.readouterr().out.strip() == "無"
+    assert "這三天暫無" in capsys.readouterr().out
 
 
 def test_corrupt_state_stops_before_send(delivery):
