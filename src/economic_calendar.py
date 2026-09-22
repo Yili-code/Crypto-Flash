@@ -13,6 +13,17 @@ from tg import TELEGRAM_CHAT_ID, send_telegram_message
 
 TAIPEI = timezone(timedelta(hours=8))
 WINDOW_DAYS = 3
+EVENT_LABELS = {
+    "CPI m/m": "CPI",
+    "CPI y/y": "CPI",
+    "Core CPI m/m": "CPI",
+    "Core CPI y/y": "CPI",
+    "Non-Farm Employment Change": "非農就業",
+    "Federal Funds Rate": "FOMC 利率決議",
+    "FOMC Statement": "FOMC 利率決議",
+    "FOMC Economic Projections": "FOMC 經濟預測",
+    "FOMC Press Conference": "FOMC 記者會",
+}
 CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
 STATE_FILE = BASE_DIR / "data" / "economic_calendar_state.json"
 log = get_logger("economic-calendar")
@@ -35,9 +46,10 @@ def select_events(payload: object, day: date) -> list[tuple[datetime, str]]:
             raise ValueError("Calendar timestamp has no timezone")
         source_day = when.date()
         weeks.add(source_day - timedelta(days=(source_day.weekday() + 1) % 7))
-        if (row["country"] == "USD" and row["impact"] == "High"
+        label = EVENT_LABELS.get(row["title"].strip())
+        if (row["country"] == "USD" and label
                 and day <= when.astimezone(TAIPEI).date() < day + timedelta(days=WINDOW_DAYS)):
-            events.add((when.astimezone(timezone.utc), row["title"].strip()))
+            events.add((when.astimezone(timezone.utc), label))
     if len(weeks) != 1:
         raise ValueError("Calendar feed spans unexpected weeks")
     week_start = next(iter(weeks))
@@ -53,18 +65,16 @@ def select_events(payload: object, day: date) -> list[tuple[datetime, str]]:
 
 def render_messages(events: list[tuple[datetime, str]], day: date) -> list[str]:
     last_day = day + timedelta(days=WINDOW_DAYS - 1)
-    header = "<b>加密市場｜三日宏觀提醒</b>\n"
-    header += f"{day:%Y/%m/%d} – {last_day:%m/%d}｜台灣時間\n"
-    footer = '\n<a href="https://www.forexfactory.com/calendar">Forex Factory</a> · 僅涵蓋美元高影響事件'
+    end_label = last_day.strftime("%m/%d" if day.year == last_day.year else "%Y/%m/%d")
+    header = '<b><a href="https://www.forexfactory.com/calendar">CPI · 非農 · FOMC</a></b>\n'
+    header += f"{day:%Y/%m/%d}–{end_label} · 台灣時間\n"
+    footer = ''
     if not events:
-        return [header + "\n這三天暫無高影響宏觀事件。\n仍需留意幣圈消息與突發風險。\n" + footer]
-    header += "含今日已發布事件\n"
+        return [header + "\n這三天沒有 CPI、非農或 FOMC。"]
     messages = []
     body = header
     for when, title in events:
-        row = (f"\n<b>{escape(title)}</b>\n"
-               f"台灣 {when.astimezone(TAIPEI):%Y-%m-%d %H:%M}\n"
-               f"UTC  {when:%Y-%m-%d %H:%M}\n")
+        row = f"\n{when.astimezone(TAIPEI):%m/%d %H:%M}  {escape(title)}"
         if len((header + row + footer).encode("utf-16-le")) // 2 > 4000:
             raise ValueError("Calendar title exceeds message limit")
         if len((body + row + footer).encode("utf-16-le")) // 2 > 4000:
@@ -98,8 +108,8 @@ async def main(*, dry_run: bool = False) -> None:
             messages = render_messages(select_events(await fetch_calendar(session), day), day)
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, TypeError) as exc:
             last_day = day + timedelta(days=WINDOW_DAYS - 1)
-            notice = (f"<b>加密市場｜三日宏觀提醒</b>\n{day:%Y/%m/%d} – {last_day:%m/%d}｜台灣時間\n\n"
-                      "暫時無法確認完整三天的資料。\n不能判定是否有宏觀事件，請稍後再查。")
+            notice = (f"<b>CPI · 非農 · FOMC</b>\n{day:%Y/%m/%d}–{last_day:%Y/%m/%d} · 台灣時間\n\n"
+                      "資料不完整或暫時無法取得。\n不能判定是否有事件。")
             if dry_run:
                 print(notice)
             else:

@@ -8,52 +8,49 @@ import pytest
 import economic_calendar as ec
 
 
-def entry(when="2026-09-16T08:30:00-04:00", title="CPI", country="USD", impact="High"):
+def entry(when="2026-09-16T08:30:00-04:00", title="CPI m/m", country="USD", impact="High"):
     return dict(date=when, title=title, country=country, impact=impact)
 
 
 def test_taiwan_day_filter_sort_deduplicate_and_utc_rollover():
-    rows = [entry(), entry(), entry("2026-09-15T14:00:00-04:00", "FOMC"),
-            entry("2026-09-16T14:00:00-04:00", "Tomorrow"),
-            entry(country="GBP"), entry(impact="Low")]
+    rows = [entry(), entry(), entry("2026-09-15T14:00:00-04:00", "FOMC Statement"),
+            entry("2026-09-16T14:00:00-04:00", "Non-Farm Employment Change"),
+            entry(country="GBP"), entry(title="Retail Sales m/m")]
     events = ec.select_events(rows, date(2026, 9, 16))
-    assert [title for _, title in events] == ["FOMC", "CPI", "Tomorrow"]
+    assert [title for _, title in events] == ["FOMC 利率決議", "CPI", "非農就業"]
     text = ec.render_messages(events, date(2026, 9, 16))[0]
-    assert "2026-09-15 18:00" in text
-    assert "2026-09-16 02:00" in text
-    assert "2026-09-16 12:30" in text
-    assert "2026-09-16 20:30" in text
+    assert "09/16 02:00  FOMC 利率決議" in text
+    assert "09/16 20:30  CPI" in text
+    assert "09/17 02:00  非農就業" in text
 
 
 def test_winter_offset_and_midnight_boundaries():
-    rows = [entry("2026-01-13T10:59:59-05:00", "before"),
-            entry("2026-01-13T11:00:00-05:00", "start"),
-            entry("2026-01-16T10:59:59-05:00", "end"),
-            entry("2026-01-16T11:00:00-05:00", "after")]
-    assert [name for _, name in ec.select_events(rows, date(2026, 1, 14))] == ["start", "end"]
+    rows = [entry("2026-01-13T10:59:59-05:00", "CPI y/y"),
+            entry("2026-01-13T11:00:00-05:00", "CPI m/m"),
+            entry("2026-01-16T10:59:59-05:00", "Non-Farm Employment Change"),
+            entry("2026-01-16T11:00:00-05:00", "FOMC Statement")]
+    assert [name for _, name in ec.select_events(rows, date(2026, 1, 14))] == ["CPI", "非農就業"]
 
 
 def test_no_events_explains_dates_scope_and_meaning():
-    text = ec.render_messages(ec.select_events([entry(impact="Low")], date(2026, 9, 16)),
+    text = ec.render_messages(ec.select_events([entry(title="Retail Sales m/m")], date(2026, 9, 16)),
                               date(2026, 9, 16))[0]
-    assert "2026/09/16 – 09/18" in text
-    assert "美元高影響事件" in text
-    assert "這三天暫無" in text
-    assert "幣圈消息與突發風險" in text
-    assert "Forex Factory" in text
+    assert "2026/09/16–09/18" in text
+    assert "這三天沒有 CPI、非農或 FOMC" in text
+    assert "https://www.forexfactory.com/calendar" in text
 
 
 def test_three_day_summer_boundaries():
-    rows = [entry("2026-09-15T11:59:59-04:00", "before"),
-            entry("2026-09-15T12:00:00-04:00", "today"),
-            entry("2026-09-16T12:00:00-04:00", "tomorrow"),
-            entry("2026-09-18T11:59:59-04:00", "last"),
-            entry("2026-09-18T12:00:00-04:00", "outside")]
+    rows = [entry("2026-09-15T11:59:59-04:00", "CPI y/y"),
+            entry("2026-09-15T12:00:00-04:00", "CPI m/m"),
+            entry("2026-09-16T12:00:00-04:00", "Non-Farm Employment Change"),
+            entry("2026-09-18T11:59:59-04:00", "FOMC Statement"),
+            entry("2026-09-18T12:00:00-04:00", "FOMC Press Conference")]
     assert [name for _, name in ec.select_events(rows, date(2026, 9, 16))] == [
-        "today", "tomorrow", "last"]
+        "CPI", "非農就業", "FOMC 利率決議"]
 
 
-@pytest.mark.parametrize("rows", [[], {}, [None], [dict(title="CPI")],
+@pytest.mark.parametrize("rows", [[], {}, [None], [dict(title="CPI m/m")],
                                      [entry("2026-09-16T08:30:00")], [entry("invalid")]])
 def test_bad_feed_never_means_no_events(rows):
     with pytest.raises((ValueError, TypeError)):
@@ -91,7 +88,7 @@ def test_success_saved_and_rerun_skipped(delivery):
     assert json.loads(ec.STATE_FILE.read_text())["last_sent_date"] == datetime.now(ec.TAIPEI).date().isoformat()
     asyncio.run(ec.main())
     delivery.assert_awaited_once()
-    assert "這三天暫無" in delivery.call_args.args[2]
+    assert "這三天沒有 CPI、非農或 FOMC" in delivery.call_args.args[2]
 
 
 def test_send_failure_does_not_save(delivery):
@@ -113,7 +110,7 @@ def test_dry_run_does_not_send_or_save(delivery, capsys):
     asyncio.run(ec.main(dry_run=True))
     delivery.assert_not_awaited()
     assert not ec.STATE_FILE.exists()
-    assert "這三天暫無" in capsys.readouterr().out
+    assert "這三天沒有 CPI、非農或 FOMC" in capsys.readouterr().out
 
 
 def test_corrupt_state_stops_before_send(delivery):
@@ -121,3 +118,12 @@ def test_corrupt_state_stops_before_send(delivery):
     with pytest.raises(ValueError):
         asyncio.run(ec.main())
     delivery.assert_not_awaited()
+
+
+def test_only_requested_events_and_same_release_deduplicated():
+    rows = [entry(title=title, impact="Medium") for title in ec.EVENT_LABELS]
+    rows += [entry(title=title) for title in ["FOMC Meeting Minutes", "FOMC Member Williams Speaks", "PPI m/m", "Unemployment Rate", "ADP Non-Farm Employment Change"]]
+    rows += [entry(country="CAD")]
+    events = ec.select_events(rows, date(2026, 9, 16))
+    assert {title for _, title in events} == {"CPI", "非農就業", "FOMC 利率決議", "FOMC 記者會", "FOMC 經濟預測"}
+    assert len(events) == 5
