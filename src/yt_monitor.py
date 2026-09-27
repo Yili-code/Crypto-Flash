@@ -201,18 +201,14 @@ async def research_video(session: aiohttp.ClientSession, video_url: str, summary
 
 # ─── 訊息組裝 ───────────────────────────────────────────────────────────────
 
-def format_message(channel_title: str, title: str, link: str, summary: Optional[str]) -> str:
+def format_message(channel_title: str, title: str, link: str, summary: str) -> str:
     # Only the Gemini summary may contain HTML; the title and channel name are raw text
     # and must be escaped, or an "&" / "<" in them makes Telegram reject the message.
+    if not summary.strip():
+        raise ValueError("refusing to build a YouTube notification without a parsed summary")
     safe_title = html_escape(title, quote=False)
     safe_channel = html_escape(channel_title, quote=False)
-    if summary:
-        return f"「{safe_title}」\n#{safe_channel}\n\n{summary}\n\n<b>Source</b> {link}"
-    return (
-        f"<b>新影片</b>：{safe_title}\n\n"
-        f"{link}\n\n"
-        "（摘要暫未完成，後續排程會重試並補送；可先點連結觀看）"
-    )
+    return f"「{safe_title}」\n#{safe_channel}\n\n{summary}\n\n<b>Source</b> {link}"
 
 
 # ─── 單一頻道的處理流程 ──────────────────────────────────────────────────────
@@ -329,6 +325,7 @@ async def process_video(session, cfg: dict, record: dict, progress: dict) -> Non
             save_progress(progress)
         else:
             log.warning("[%s] 摘要尚未完成，保留待重試", record["video_id"])
+            return
     if record["summary_completed"] and not record["research_completed"]:
         research = await research_video(session, record["link"], record["summary"])
         if research:

@@ -4,7 +4,7 @@
 
 **快訊分級 · 新聞查詢 · 每日重點 · 事件追蹤**
 
-這個專案會持續監控 Jin10 的 WebSocket 快訊，當新聞命中你的關鍵字時，會交給 Gemini 進行分級與摘要，並自動推播到 Telegram。你也可以直接在 Telegram 提問，系統會把近期已監控的快訊背景一併納入回答。
+這個專案會持續監控 Jin10 WebSocket，以及 CoinDesk、Decrypt、SEC、CFTC、Federal Reserve 的 RSS/Atom。新聞命中你的關鍵字時，會交給 Gemini 進行分級與摘要，並自動推播到 Telegram。你也可以直接在 Telegram 提問，系統會把近期已監控的快訊背景一併納入回答。
 
 [![GitHub Actions](https://img.shields.io/badge/自動化-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](.)
@@ -40,6 +40,7 @@
 ### 它做了什麼
 
 - 直接連接 Jin10 的 WebSocket 訊號流
+- 每兩分鐘輪詢可設定的 RSS/Atom 來源；首次啟用只建立已讀基準，不回播舊文章
 - 解析快訊內容並以關鍵字過濾雜訊
 - 將符合條件的新聞交給 Gemini 做分級、摘要與風險判斷
 - 把重要內容即時推到 Telegram
@@ -85,7 +86,8 @@
 - 強制終止或 GitHub 回存失敗可能遺失尚未提交的計數；回存失敗會明確標示 workflow 失敗。此機制不是帳單硬上限。
 
 ```text
-Jin10 WebSocket → 解析封包 → 待處理佇列 → 關鍵字比對
+Jin10 WebSocket ─┐
+RSS/Atom 來源 ───┴→ 正規化 → 待處理佇列 → 關鍵字比對
    ↓
 Gemini 可用：分級與摘要；不可用：保留未分級紀錄
    ↓
@@ -99,6 +101,8 @@ news_archive.json → 每日重點、事件時間線與追蹤進展
 ```
 
 `flash_service.py` 在同一個 runner 同時執行監控和問答，即時共用 `recent_news.json`。舊版分開執行的 Telegram Assistant workflow 必須停止，避免重複接收 Telegram updates。
+
+RSS/Atom 清單位於 `config/news_feeds.json`，只接受 HTTPS；可用 `python src/feed_monitor.py` 檢查目前各來源是否可達及可解析，不會更新已讀狀態或發送 Telegram。已讀狀態保存在 `data/feed_seen.json`，避免每六小時重啟 workflow 時重複處理同一篇文章。新增來源的第一次抓取只預熱現有文章，之後的新文章才會進入共用佇列。
 
 Gemini 啟動檢查或執行中的摘要請求失敗時，快訊監控會暫停推播並在背景每 30 秒重新檢查連線，成功後自動恢復摘要推播。中斷期間仍接收快訊並保存符合關鍵字的新聞背景，不會改推原文；這些已略過的新聞不會在恢復後補發。未設定 API key 時也會暫停推播。這項恢復機制與 Jin10 WebSocket 原有的斷線重連分開運作。
 
@@ -126,7 +130,7 @@ Telegram 推播摘要與來源連結
 
 摘要固定包含「一句話結論、主要論證、實際用途」，其餘結構與篇幅依每支影片調整；頻道提示僅設定內容側重。接著透過 Gemini Google Search 查證重要論點，附上 API 回傳的對應來源，並與影片原意分開呈現。搜尋失敗或沒有可引用來源時，保留摘要並標示「外部查證未完成」。這會增加 API 用量與處理時間，搜尋費用依 Google 帳戶方案計算。
 
-每部新影片另外在 `data/yt_progress.json` 記錄「已通知、摘要完成、查證完成」，並保存產出的內容與送達進度。摘要失敗時先發一次影片連結；後續排程重試摘要。摘要完成但查證失敗時先發摘要並標示待查證，恢復後只補送查證結果。已完成步驟不會重做；待處理影片即使離開 RSS 或 RSS 暫時失敗仍可接續。每輪依最久未嘗試的順序處理，受頻道單輪上限約束。
+每部新影片另外在 `data/yt_progress.json` 記錄「已通知、摘要完成、查證完成」，並保存產出的內容與送達進度。影片摘要失敗時不發送任何訊息、不標記已讀，保留待處理狀態並由後續排程重試；只有摘要成功後才首次推送。摘要完成但查證失敗時先發摘要並標示待查證，恢復後只補送查證結果。已完成步驟不會重做；待處理影片即使離開 RSS 或 RSS 暫時失敗仍可接續。每輪依最久未嘗試的順序處理，受頻道單輪上限約束。
 
 長摘要會自動拆成多則 Telegram 訊息，每段成功後保存進度，重跑只續傳未完成段落。Telegram 已收件但本機尚未記錄／GitHub 尚未回存就中斷時，仍可能重複發送。未完成紀錄不會清除；完成紀錄保留最近 300 筆（沿用 `YT_MAX_SEEN_IDS`）。既有已讀清單照常使用，升級不回播舊影片；舊版未保存失敗原因，因此無法自動回補升級前缺少的摘要或查證。
 

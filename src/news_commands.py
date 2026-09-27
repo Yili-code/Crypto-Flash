@@ -76,8 +76,9 @@ def _render_results(items: list[dict], heading: str, limit: int) -> str:
     for item in items[:limit]:
         clock = datetime.fromtimestamp(item["ts"], DISPLAY_TZ).strftime("%m/%d %H:%M")
         tier = item["tier"] if item["tier"] in TIER_LEVELS else "未分級"
+        source = str(item.get("source") or "Jin10").strip()
         title = item["title"] or item["content"]
-        row = f"{clock} · {tier}\n<b>{escape(_clip(title, 100))}</b>"
+        row = f"{clock} · {tier} · {escape(_clip(source, 40))}\n<b>{escape(_clip(title, 100))}</b>"
         if item["title"] and item["content"] and item["content"] != item["title"]:
             row += "\n" + escape(_clip(item["content"], 160))
         # Keep complete rows and HTML entities; reserve room for the heading/footer.
@@ -115,7 +116,8 @@ def _render_important(items: list[dict], limit: int) -> str:
             continue
         seen.add(plain)
         clock = datetime.fromtimestamp(item["ts"], DISPLAY_TZ).strftime("%m/%d %H:%M")
-        row = f"<b>{item['tier']} · {clock}</b>\n{escape(_clip(plain, 600))}"
+        source_name = str(item.get("source") or "Jin10").strip()
+        row = f"<b>{item['tier']} · {clock} · {escape(_clip(source_name, 40))}</b>\n{escape(_clip(plain, 600))}"
         if len(rows) < limit and sum(len(part.encode("utf-16-le")) // 2 for part in rows + [row]) <= MESSAGE_BUDGET - 500:
             rows.append(row)
     body = "\n\n".join(rows) if rows else "目前沒有可用的已整理摘要。"
@@ -152,11 +154,13 @@ def local_command_reply(text: str, bot_username: str) -> str | None:
             age = max(0, int((time.time() - items[0]["ts"]) // 60))
             latest = f"{stamp} UTC+8（{age} 分鐘前）"
         distribution = " · ".join(f"{tier} {count}" for tier, count in counts.items())
+        sources = sorted({str(item.get("source") or "Jin10").strip() for item in items})
+        source_text = "、".join(sources) if sources else "尚無資料"
         unknown = len(items) - sum(counts.values())
         return (
             f"<b>新聞資料狀態</b>\n保存範圍：最近 {CONTEXT_MAX_AGE_SEC / 3600:g} 小時\n"
             f"可查詢：{len(items)} 則\n最新紀錄：{latest}\n"
-            f"{distribution}\n未分級 {unknown}\n\n"
+            f"{distribution}\n未分級 {unknown}\n來源：{escape(source_text)}\n\n"
             "以上反映本次問答服務可讀取的新聞資料，不代表監控器或 Gemini 的即時連線狀態。"
         )
     if name == "search":

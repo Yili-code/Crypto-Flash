@@ -6,7 +6,7 @@ An automated crypto-news monitoring system that filters high-volume market updat
 
 ## What it demonstrates
 
-- Resilient WebSocket ingestion with reconnect and idle-timeout handling
+- Multi-source ingestion: Jin10 WebSocket plus curated crypto and official RSS feeds
 - A bounded processing queue that protects ingestion under back pressure
 - Gemini-based relevance grading, summaries, and background recovery
 - Telegram delivery with throttling and rate-limit retries
@@ -18,7 +18,8 @@ An automated crypto-news monitoring system that filters high-volume market updat
 ## System flow
 
 ```text
-Jin10 WebSocket → parse → filter → bounded queue
+Jin10 WebSocket ─┐
+Curated RSS/Atom ├→ normalize → filter → bounded queue
                                   ↓
                          Gemini classify/summarize
                                   ↓

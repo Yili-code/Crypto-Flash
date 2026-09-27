@@ -6,12 +6,13 @@ import re
 import struct
 import time
 from collections import deque
-from html import unescape
+from html import escape, unescape
 from typing import Optional
 
 import aiohttp
 import websockets
 
+from feed_monitor import feed_loop
 from common import (
     CONTEXT_MAX_AGE_SEC,
     CONTEXT_MAX_ITEMS,
@@ -353,28 +354,34 @@ async def gemini_recovery_loop(session: aiohttp.ClientSession) -> None:
         await asyncio.sleep(GEMINI_RECONNECT_DELAY)
 
 def remember_news(
-    title: str, content: str, tier: Optional[str], *, summary: str = "", relevant: Optional[bool] = None, news_id: str = "",
+    title: str, content: str, tier: Optional[str], *, summary: str = "", relevant: Optional[bool] = None,
+    news_id: str = "", source: str = "Jin10", url: str = "",
 ) -> None:
     now = time.time()
     recent_news.append({"ts": now, "title": title, "content": content, "tier": tier,
-                        "summary": summary, "relevant": relevant, "id": news_id})
+                        "summary": summary, "relevant": relevant, "id": news_id, "source": source, "url": url})
     while recent_news and now - recent_news[0]["ts"] > CONTEXT_MAX_AGE_SEC:
         recent_news.popleft()
     save_recent_news(list(recent_news))
     archive_news({"id": news_id, "ts": now, "title": title, "content": content,
-                  "tier": tier, "summary": summary, "relevant": relevant})
+                  "tier": tier, "summary": summary, "relevant": relevant, "source": source, "url": url})
 
 
 # ─── Message assembly ──────────────────────────────────────────────────────────
 
 TIER_BADGES = {"CRITICAL", "HIGH", "MEDIUM"}
 
-def format_message(summary: str, tier: Optional[str] = None) -> str:
+def format_message(summary: str, tier: Optional[str] = None, *, source: str = "", url: str = "") -> str:
     parts = []
     if tier in TIER_BADGES:
         parts.append(tier)
     if summary:
         parts.append(summary)
+    if source and (source != "Jin10" or url):
+        label = f"來源：{escape(source)}"
+        if url.startswith("https://"):
+            label = f'<a href="{escape(url, quote=True)}">{label}</a>'
+        parts.append(label)
     return "\n".join(parts)
 
 
@@ -383,11 +390,14 @@ def format_message(summary: str, tier: Optional[str] = None) -> str:
 async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
     global GEMINI_AVAILABLE
     title, content = item_text(item)
-    full_text = f"{title} {content}".strip()
-    if not full_text:
+    source = str(item.get("source") or "Jin10").strip()
+    url = str(item.get("url") or "").strip()
+    article_text = f"{title} {content}".strip()
+    if not article_text:
         return
-    if not match_keywords(full_text):
+    if not match_keywords(article_text):
         return
+    full_text = f"Source: {source}\n{article_text}"
 
     log.info("Keyword match: %s", (title or content)[:60])
 
@@ -399,14 +409,14 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
             GEMINI_AVAILABLE = False
             # Gemini failed; skip this item entirely instead of broadcasting raw content
             log.warning("Gemini tiering failed; skipping push: %s", (title or content)[:60])
-            remember_news(title, content, None, news_id=str(item.get("id") or ""))
+            remember_news(title, content, None, news_id=str(item.get("id") or ""), source=source, url=url)
             return
         else:
             tier = result["tier"]
             if tier == "LOW":
                 return
             remember_news(title, content, tier, summary=result["message"], relevant=result["relevant"],
-                          news_id=str(item.get("id") or ""))
+                          news_id=str(item.get("id") or ""), source=source, url=url)
             # Unknown/unparseable tier is treated as the lowest priority (LOW) rather than
             # bypassing the filter entirely, so MAX_TIER_TO_SEND still applies to it.
             tier_rank = TIER_RANK.get(tier, TIER_RANK["LOW"])
@@ -416,11 +426,11 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
                 return
             summary = result["message"]
     else:
-        remember_news(title, content, None, news_id=str(item.get("id") or ""))
+        remember_news(title, content, None, news_id=str(item.get("id") or ""), source=source, url=url)
         log.info("Gemini unavailable; retaining context without pushing raw news")
         return
 
-    msg = format_message(summary, tier=tier)
+    msg = format_message(summary, tier=tier, source=source, url=url)
     ok = await send_telegram_message(session, TELEGRAM_CHAT_ID, msg, TELEGRAM_BOT_TOKEN_01)
     log.info("Telegram send %s", "successful" if ok else "failed")
 
@@ -525,12 +535,18 @@ async def main() -> None:
         outbox: asyncio.Queue[dict] = asyncio.Queue(maxsize=OUTBOX_MAXSIZE)
         worker = asyncio.create_task(outbox_worker(session, outbox))
         recovery = asyncio.create_task(gemini_recovery_loop(session))
+        async def emit_feed_item(item: dict) -> None:
+            enqueue_item(outbox, item)
+        feeds = asyncio.create_task(feed_loop(session, emit_feed_item))
+        receiver = asyncio.create_task(ws_loop(session, outbox))
         try:
-            await ws_loop(session, outbox)
+            await asyncio.gather(receiver, feeds)
         finally:
             worker.cancel()
             recovery.cancel()
-            await asyncio.gather(worker, recovery, return_exceptions=True)
+            feeds.cancel()
+            receiver.cancel()
+            await asyncio.gather(worker, recovery, feeds, receiver, return_exceptions=True)
 
 if __name__ == "__main__":
     try:

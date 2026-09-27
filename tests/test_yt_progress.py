@@ -30,14 +30,15 @@ def run():
     return yt.load_progress()['UC123:newest']
 
 
-def test_summary_quota_failure_notifies_once_then_completes_after_restart(flow):
+def test_summary_failure_stays_silent_then_sends_once_after_recovery(flow):
     fetch, summary, research, send = flow
     summary.return_value = None
     record = run()
-    assert record['notified'] and not record['summary_completed'] and not record['research_completed']
-    assert yt.load_seen_state()['c'] == ['older', 'newest']
+    assert not record['notified'] and not record['summary_completed'] and not record['research_completed']
+    assert yt.load_seen_state()['c'] == ['older']
+    send.assert_not_awaited()
     run()
-    assert send.await_count == 1
+    send.assert_not_awaited()
     research.assert_not_awaited()
     # A new process can resume even when the old video has left the feed.
     fetch.return_value = None
@@ -45,11 +46,11 @@ def test_summary_quota_failure_notifies_once_then_completes_after_restart(flow):
     record = run()
     assert record['summary_completed'] and record['research_completed']
     assert record['summary_delivered'] and record['research_delivered']
-    assert send.await_count == 2
+    assert send.await_count == 1
     assert 'recovered summary' in send.call_args.args[2]
     assert 'cited research' in send.call_args.args[2]
     run()
-    assert send.await_count == 2
+    assert send.await_count == 1
     assert summary.await_count == 3
 
 
@@ -177,7 +178,7 @@ def test_integrated_api_quota_recovery_across_three_runs(tmp_path, monkeypatch):
         return yt.load_progress()['UC123:newest']
     first = FakeSession([FakeResponse(200, FEED), FakeResponse(429, 'RESOURCE_EXHAUSTED'), FakeResponse(200)])
     record = execute(first)
-    assert record['notified'] and not record['summary_completed']
+    assert not record['notified'] and not record['summary_completed']
     clock[0] += 31
     second = FakeSession([FakeResponse(503), response('summary'), FakeResponse(429, 'RESOURCE_EXHAUSTED'), FakeResponse(200)])
     record = execute(second)
@@ -200,7 +201,7 @@ def test_pending_records_survive_completed_history_pruning(flow, monkeypatch):
     summary.return_value = None
     run()
     state = yt.load_progress()
-    finished = dict(state['UC123:newest'], summary='s', research='r', summary_completed=True,
+    finished = dict(state['UC123:newest'], notified=True, summary='s', research='r', summary_completed=True,
                     research_completed=True, summary_delivered=True, research_delivered=True)
     for i in range(3):
         state[f'UC123:done{i}'] = dict(finished, video_id=f'done{i}')

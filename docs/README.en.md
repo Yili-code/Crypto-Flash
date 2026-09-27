@@ -4,7 +4,7 @@
 
 **News grading · On-demand queries · Daily roundups · Event tracking**
 
-This project continuously watches the Jin10 WebSocket feed. When a news item matches your keywords, Gemini grades and summarizes it, then the result is pushed to Telegram. You can also ask questions directly in Telegram, and the bot will use recent monitored flash news as background context.
+This project continuously watches the Jin10 WebSocket feed plus CoinDesk, Decrypt, SEC, CFTC, and Federal Reserve RSS/Atom feeds. When a news item matches your keywords, Gemini grades and summarizes it, then the result is pushed to Telegram. You can also ask questions directly in Telegram, and the bot will use recent monitored flash news as background context.
 
 [![GitHub Actions](https://img.shields.io/badge/Automation-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](.)
@@ -40,6 +40,7 @@ This is a GitHub Actions-driven automation project for tracking and filtering Ji
 ### What it does
 
 - Connects directly to Jin10 WebSocket feeds
+- Polls configurable RSS/Atom sources every two minutes; the first fetch establishes a baseline without replaying old articles
 - Parses messages and removes noise with keyword filtering
 - Sends relevant items to Gemini for grading and summary
 - Pushes important updates to Telegram
@@ -75,7 +76,8 @@ Transient failures use persisted exponential cooldowns starting at 30 seconds, c
 Authentication/configuration errors block attempts until the key/model changes, or `GEMINI_POLICY_REVISION` changes after fixing external account settings. This does not reset daily consumption. Invalid requests block identical payloads only. Each workflow owns its `data/gemini_youtube_usage.json` or `data/gemini_live_usage.json`; corrupt/unwritable state stops calls. Other applications/machines are not counted. Forced termination or remote persistence failure can lose uncommitted counts; this is not a billing hard cap.
 
 ```text
-Jin10 WebSocket → Parse packets → Bounded queue → Keyword matching
+Jin10 WebSocket ─┐
+RSS/Atom feeds ──┴→ Normalize → Bounded queue → Keyword matching
    ↓
 Gemini available: grade and summarize; unavailable: keep ungraded record
    ↓
@@ -89,6 +91,8 @@ news_archive.json → Daily roundups, timelines, and tracked updates
 ```
 
 `flash_service.py` runs ingestion and Q&A together on one runner, sharing live context. Stop any old standalone Telegram Assistant workflow run before migration to avoid competing Telegram pollers.
+
+The RSS/Atom source list is `config/news_feeds.json` and accepts HTTPS endpoints only. Run `python src/feed_monitor.py` to check that every source is currently reachable and parseable without changing seen state or sending Telegram messages. Seen IDs are stored in `data/feed_seen.json`, preventing workflow restarts from reprocessing the same articles. A newly added source is warmed on its first fetch; only later publications enter the shared queue.
 
 Records are saved before the push threshold check and Telegram delivery, so a saved record does not prove delivery. The default `MEDIUM` threshold sends CRITICAL, HIGH, and MEDIUM; LOW items are discarded before storage and never pushed; unclassified records are still retained. When the queue fills, the oldest pending item is dropped before processing and is not archived.
 
@@ -108,7 +112,7 @@ Gemini watches the video and writes an adaptive summary with external fact-check
 Push the summary and source link to Telegram
 ```
 
-The first run for each channel warms up `data/yt_seen_ids.json` without notifying existing videos. Subsequent discoveries are all saved as pending. `max_new_per_run` limits attempts per channel, including retries; excess videos remain pending and are never marked seen merely for exceeding the limit. Failed summaries still send a video link once.
+The first run for each channel warms up `data/yt_seen_ids.json` without notifying existing videos. Subsequent discoveries are all saved as pending. `max_new_per_run` limits attempts per channel, including retries; excess videos remain pending and are never marked seen merely for exceeding the limit. Failed summaries stay silent and pending until a later run successfully parses the video.
 
 All feeds are saved before processing videos round-robin (A1, B1, C1, A2, B2, C2). `data/yt_schedule.json` records the next channel before each attempt so interrupted runs resume fairly; completed runs also rotate their starting channel. A 21-minute processing deadline leaves work pending for later runs. Discovery continues even if Telegram is unavailable. Videos that left RSS before ever being discovered cannot be recovered automatically; previously skipped legacy seen IDs are not replayed.
 
@@ -127,7 +131,7 @@ Example channel configuration:
 
 `name` must be unique, and `channel_id` is the YouTube channel ID. `system_prompt` is optional and sets a channel's focus, not a fixed template. Each video gets a conclusion, main arguments, and practical implications, with structure and length adapted to its content. A separate Gemini Google Search request checks key claims and adds API-linked sources; missing sources or search failures are explicitly disclosed while retaining the video summary. Search adds API usage, latency, and any Google plan-dependent search charges.
 
-`data/yt_progress.json` separately records notification, summary completion, research completion, generated content, and delivery receipts. A failed summary sends a link once and remains pending. Failed research preserves and delivers the summary; later runs send only the research supplement. Pending videos resume even after leaving RSS or when feed fetching fails. Oldest-attempted pending work runs first within the per-channel limit. Completed steps are reused.
+`data/yt_progress.json` separately records notification, summary completion, research completion, generated content, and delivery receipts. A failed summary sends nothing, remains unread, and stays pending until parsing succeeds. Failed research preserves and delivers the successfully parsed summary; later runs send only the research supplement. Pending videos resume even after leaving RSS or when feed fetching fails. Oldest-attempted pending work runs first within the per-channel limit. Completed steps are reused.
 
 Long reports are split into multiple Telegram messages with a saved cursor after each successful part. A crash between Telegram acceptance and durable local/remote persistence can still cause duplicates. Pending records are never pruned; the latest 300 completed records are retained (using `YT_MAX_SEEN_IDS`). Existing `data/yt_seen_ids.json` entries remain deduplicated without historical replay; old failures cannot be inferred or backfilled automatically. GitHub Actions persists both files.
 

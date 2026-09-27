@@ -85,10 +85,9 @@ def test_format_message_escapes_the_title_but_keeps_the_summary_markup():
     assert "<b>summary</b>" in msg
 
 
-def test_format_message_escapes_the_title_in_the_fallback_too():
-    msg = yt.format_message("c", "A & B", "https://x/1", None)
-    assert "A &amp; B" in msg
-    assert "https://x/1" in msg
+def test_format_message_rejects_a_missing_summary():
+    with pytest.raises(ValueError, match="without a parsed summary"):
+        yt.format_message("c", "A & B", "https://x/1", "")
 
 
 # ─── channel configuration ─────────────────────────────────────────────────────

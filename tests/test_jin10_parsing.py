@@ -77,6 +77,12 @@ def test_format_message_prefixes_only_the_badged_tiers():
     assert jm.format_message("body", None) == "body"
 
 
+def test_format_message_links_and_escapes_the_source():
+    assert jm.format_message("body", "HIGH", source="News & Co", url="https://example.com/a?x=1&y=2") == (
+        'HIGH\nbody\n<a href="https://example.com/a?x=1&amp;y=2">來源：News &amp; Co</a>'
+    )
+
+
 def test_is_new_dedupes_by_id(monkeypatch):
     monkeypatch.setattr(jm, "seen_ids", {})
     assert jm.is_new({"id": "1"})

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "CoinDesk",
+    "url": "https://www.coindesk.com/arc/outboundfeeds/rss/"
+  },
+  {
+    "name": "Decrypt",
+    "url": "https://decrypt.co/feed"
+  },
+  {
+    "name": "SEC",
+    "url": "https://www.sec.gov/news/pressreleases.rss"
+  },
+  {
+    "name": "CFTC",
+    "url": "https://www.cftc.gov/RSS/RSSGP/rssgp.xml"
+  },
+  {
+    "name": "Federal Reserve",
+    "url": "https://www.federalreserve.gov/feeds/press_all.xml"
+  }
+]
