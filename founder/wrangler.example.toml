@@ -1,0 +1,22 @@
+name = "founder-morning"
+main = "worker.mjs"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/internal/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "founder-morning"
+database_id = "REPLACE_WITH_YOUR_D1_ID"
+migrations_dir = "migrations"
+
+[ai]
+binding = "AI"
+
+[vars]
+AI_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8"
+# Set after deployment. Used only for the Telegram link.
+SITE_URL = "https://founder-morning.YOUR-SUBDOMAIN.workers.dev"

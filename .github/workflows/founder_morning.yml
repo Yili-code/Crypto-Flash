@@ -1,0 +1,33 @@
+name: Founder Morning
+on:
+  schedule:
+    # Taipei 05:37 preparation, 06:07 delivery, 06:37 recovery. Scheduling can be delayed.
+    - cron: '37 21 * * *'
+    - cron: '7,37 22 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: founder-morning
+  cancel-in-progress: false
+jobs:
+  morning:
+    if: vars.FOUNDER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare or deliver today's research
+        env:
+          FOUNDER_URL: ${{ vars.FOUNDER_URL }}
+          FOUNDER_JOB_TOKEN: ${{ secrets.FOUNDER_JOB_TOKEN }}
+          PREPARE_ONLY: ${{ github.event.schedule == '37 21 * * *' }}
+        run: |
+          if [ "$PREPARE_ONLY" = "true" ]; then
+            python founder/pipeline.py
+          else
+            python founder/pipeline.py --send
+          fi
