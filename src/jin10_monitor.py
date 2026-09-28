@@ -369,7 +369,8 @@ def remember_news(
 
 # ─── Message assembly ──────────────────────────────────────────────────────────
 
-TIER_BADGES = {"CRITICAL", "HIGH", "MEDIUM"}
+TIER_BADGES = {"CRITICAL", "HIGH"}
+DISCARDED_TIERS = {"MEDIUM", "LOW"}
 
 def format_message(summary: str, tier: Optional[str] = None, *, source: str = "", url: str = "") -> str:
     parts = []
@@ -413,7 +414,7 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
             return
         else:
             tier = result["tier"]
-            if tier == "LOW":
+            if tier in DISCARDED_TIERS:
                 return
             remember_news(title, content, tier, summary=result["message"], relevant=result["relevant"],
                           news_id=str(item.get("id") or ""), source=source, url=url)

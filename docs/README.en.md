@@ -94,7 +94,7 @@ news_archive.json → Daily roundups, timelines, and tracked updates
 
 The RSS/Atom source list is `config/news_feeds.json` and accepts HTTPS endpoints only. Run `python src/feed_monitor.py` to check that every source is currently reachable and parseable without changing seen state or sending Telegram messages. Seen IDs are stored in `data/feed_seen.json`, preventing workflow restarts from reprocessing the same articles. A newly added source is warmed on its first fetch; only later publications enter the shared queue.
 
-Records are saved before the push threshold check and Telegram delivery, so a saved record does not prove delivery. The default `MEDIUM` threshold sends CRITICAL, HIGH, and MEDIUM; LOW items are discarded before storage and never pushed; unclassified records are still retained. When the queue fills, the oldest pending item is dropped before processing and is not archived.
+Records are saved before the push threshold check and Telegram delivery, so a saved record does not prove delivery. Only CRITICAL and HIGH items are retained and pushed. MEDIUM and LOW items are discarded immediately after grading, before storage, and are never pushed; unclassified records are still retained. When the queue fills, the oldest pending item is dropped before processing and is not archived.
 
 ### YouTube video monitor
 
@@ -184,7 +184,7 @@ In a Telegram group, you can mention the bot or use `/ask`; in private chat, you
 
 | Command | Purpose |
 |---|---|
-| `/digest` | Yesterday's roundup, ordered by CRITICAL, HIGH, MEDIUM; up to 8 events |
+| `/digest` | Yesterday's roundup, ordered by CRITICAL and HIGH; up to 8 events |
 | `/digest today` | Today's roundup so far |
 | `/digest YYYY-MM-DD` | A selected date within the retained archive |
 | `/news`, `/news 10` | Latest 5 or 10 records, with a maximum of 10 |
@@ -304,7 +304,7 @@ These files, along with `data/news_archive.json`, `data/daily_digest_state.json`
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `MAX_TIER_TO_SEND` | `MEDIUM` | Only send pushes when the Gemini tier meets this threshold |
+| `MAX_TIER_TO_SEND` | `HIGH` | Push threshold; may be narrowed to CRITICAL, while MEDIUM and LOW are always discarded |
 | `KEYWORDS_FILE` | empty | Optional custom keyword file |
 | `WS_URLS` | `wss://wss-flash-2.jin10.com/` | Jin10 WebSocket endpoint |
 | `WS_IDLE_TIMEOUT` | `180` | Reconnect if no traffic is seen |

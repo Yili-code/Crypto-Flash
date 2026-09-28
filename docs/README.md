@@ -106,7 +106,7 @@ RSS/Atom 清單位於 `config/news_feeds.json`，只接受 HTTPS；可用 `pytho
 
 Gemini 啟動檢查或執行中的摘要請求失敗時，快訊監控會暫停推播並在背景每 30 秒重新檢查連線，成功後自動恢復摘要推播。中斷期間仍接收快訊並保存符合關鍵字的新聞背景，不會改推原文；這些已略過的新聞不會在恢復後補發。未設定 API key 時也會暫停推播。這項恢復機制與 Jin10 WebSocket 原有的斷線重連分開運作。
 
-保存發生在推播門檻判斷與 Telegram 發送之前，因此「有紀錄」不等於「已推播」。預設 `MEDIUM` 門檻會推送 CRITICAL、HIGH、MEDIUM；LOW 分級快訊直接丟棄，不保存至近期紀錄或歷史資料，也不推播；未分級資料仍會保留。佇列滿時會丟棄最舊待處理項目，這些項目不會進入保存流程。
+保存發生在推播門檻判斷與 Telegram 發送之前，因此「有紀錄」不等於「已推播」。只保留並推送 CRITICAL、HIGH；MEDIUM、LOW 分級快訊會在分級後立即丟棄，不保存至近期紀錄或歷史資料，也不推播。未分級資料仍會保留。佇列滿時會丟棄最舊待處理項目，這些項目不會進入保存流程。
 
 ### YouTube 影片監控
 
@@ -198,7 +198,7 @@ python src/flash_service.py
 
 | Telegram 指令 | 用途 |
 |---|---|
-| `/digest` | 昨日重點，按 CRITICAL、HIGH、MEDIUM 排序，最多列出 8 則 |
+| `/digest` | 昨日重點，按 CRITICAL、HIGH 排序，最多列出 8 則 |
 | `/digest today` | 今日截至目前的重點 |
 | `/digest YYYY-MM-DD` | 指定日期的重點，限保存的資料 |
 | `/news`、`/news 10` | 最近 5 則或 10 則快訊，最多 10 則 |
@@ -316,7 +316,7 @@ python src/yt_monitor.py
 
 | 變數 | 預設值 | 用途 |
 |---|---|---|
-| `MAX_TIER_TO_SEND` | `MEDIUM` | 推播門檻，達到或高於此等級才送出 |
+| `MAX_TIER_TO_SEND` | `HIGH` | 推播門檻，可再收窄為只送 CRITICAL；MEDIUM、LOW 固定丟棄 |
 | `KEYWORDS_FILE` | 空 | 自訂關鍵字檔案路徑 |
 | `WS_URLS` | `wss://wss-flash-2.jin10.com/` | Jin10 WebSocket 端點 |
 | `WS_IDLE_TIMEOUT` | `180` | 若長時間無訊息就重連 |

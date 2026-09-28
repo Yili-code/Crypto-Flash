@@ -43,10 +43,10 @@ def resolve_max_tier(raw: str) -> int:
     try:
         return int(raw)
     except ValueError:
-        return TIER_RANK["MEDIUM"]
+        return TIER_RANK["HIGH"]
 
 
-MAX_TIER_TO_SEND = resolve_max_tier(os.getenv("MAX_TIER_TO_SEND", "MEDIUM"))
+MAX_TIER_TO_SEND = resolve_max_tier(os.getenv("MAX_TIER_TO_SEND", "HIGH"))
 
 # ─── Recent News Context (written by monitor, read by qa; shared access logic to prevent format drift) ──
 

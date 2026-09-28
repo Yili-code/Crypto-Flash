@@ -13,8 +13,8 @@ def test_resolve_max_tier_accepts_numbers():
     assert common.resolve_max_tier("2") == 2
 
 
-def test_resolve_max_tier_falls_back_to_medium_on_garbage():
-    assert common.resolve_max_tier("nonsense") == common.TIER_RANK["MEDIUM"]
+def test_resolve_max_tier_falls_back_to_high_on_garbage():
+    assert common.resolve_max_tier("nonsense") == common.TIER_RANK["HIGH"]
 
 
 def test_recent_news_round_trip(tmp_path, monkeypatch):

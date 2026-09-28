@@ -106,7 +106,7 @@ async def build_digest(session, day: date, *, usage_scope="live") -> str:
     if not items:
         return heading + "沒有可用的新聞紀錄。可能尚未累積資料或監控中斷，並不代表當天沒有重要事件。"
     candidates = [item for item in items
-                  if item.get("tier") in ("CRITICAL", "HIGH", "MEDIUM")
+                  if item.get("tier") in ("CRITICAL", "HIGH")
                   and item.get("relevant") is not False
                   and isinstance(item.get("summary"), str) and item["summary"].strip()]
     candidates.sort(key=lambda item: (TIER_RANK[item["tier"]], -item["ts"]))

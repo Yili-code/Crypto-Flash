@@ -73,12 +73,13 @@ def test_missing_key_never_pushes_raw_news(monkeypatch, monitor):
     monitor.assert_not_awaited()
 
 
+@pytest.mark.parametrize("tier", ["MEDIUM", "LOW"])
 @pytest.mark.parametrize("relevant", [True, False])
-def test_low_is_discarded_before_storage_even_with_low_push_threshold(monkeypatch, monitor, relevant):
+def test_medium_and_low_are_discarded_before_storage(monkeypatch, monitor, tier, relevant):
     monkeypatch.setattr(jm, "GEMINI_AVAILABLE", True)
     monkeypatch.setattr(jm, "MAX_TIER_TO_SEND", 4)
     monkeypatch.setattr(jm, "summarize_with_gemini", AsyncMock(return_value={
-        "tier": "LOW", "relevant": relevant, "message": "Low summary",
+        "tier": tier, "relevant": relevant, "message": f"{tier} summary",
     }))
     remember = Mock()
     monkeypatch.setattr(jm, "remember_news", remember)

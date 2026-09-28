@@ -38,7 +38,7 @@ def test_monitor_archives_summary_even_below_push_threshold(monkeypatch):
     monkeypatch.setattr(jm, "KEYWORDS", ["BTC"])
     monkeypatch.setattr(jm, "MAX_TIER_TO_SEND", 1)
     monkeypatch.setattr(jm, "summarize_with_gemini", AsyncMock(return_value={
-        "tier": "MEDIUM", "relevant": True, "message": "Saved summary",
+        "tier": "HIGH", "relevant": True, "message": "Saved summary",
     }))
     sender = AsyncMock()
     monkeypatch.setattr(jm, "send_telegram_message", sender)
@@ -57,6 +57,7 @@ def daily_items(monkeypatch):
         {"ts": start + 100, "tier": "CRITICAL", "summary": "Critical event", "relevant": True},
         {"ts": start + 200, "tier": None, "content": "RAW MUST NOT BE SENT"},
         {"ts": start + 300, "tier": "LOW", "summary": "Low event"},
+        {"ts": start + 350, "tier": "MEDIUM", "summary": "Medium event"},
         {"ts": start + 400, "tier": "HIGH", "summary": "Irrelevant", "relevant": False},
         {"ts": start - 1, "tier": "HIGH", "summary": "Previous day"},
         {"ts": start + 86400, "tier": "HIGH", "summary": "Next day"},
