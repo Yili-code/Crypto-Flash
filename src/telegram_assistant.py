@@ -1,12 +1,13 @@
 import asyncio
 import os
 import re
-import time
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import aiohttp
 
 from common import get_logger, load_recent_news
+from news_archive import load_archive
 from gemini import GEMINI_API_KEY, call_gemini
 from event_tracking import EVENT_COMMANDS, EventReply, EventStateError, acknowledge_updates, event_command_reply
 from news_commands import digest_command_reply, local_command_reply, parse_command
@@ -21,22 +22,68 @@ from tg import (
 log = get_logger("jin10-qa")
 
 CONTEXT_SNIPPET_LIMIT = int(os.getenv("CONTEXT_SNIPPET_LIMIT", "40"))
+DISPLAY_TZ = timezone(timedelta(hours=8))
+DAY_QUERY_RE = re.compile(r"(?:今天|今日|本日|today)", re.IGNORECASE)
+ENTITY_ALIASES = {
+    "iran": ("iran", "iranian", "伊朗"),
+    "伊朗": ("iran", "iranian", "伊朗"),
+}
 
 
 # ─── Recent flash context (read from the shared file written by jin10_monitor.py) ────────────────────
 
-def build_context_snippet(limit: int = CONTEXT_SNIPPET_LIMIT) -> str:
-    items = load_recent_news()[-limit:]
+
+def _question_terms(question: str) -> set[str]:
+    folded = question.casefold()
+    terms = {
+        token
+        for token in re.findall(r"[a-z][a-z0-9_-]{1,}", folded)
+        if token not in {"today", "what", "which", "about", "important"}
+    }
+    for needle, aliases in ENTITY_ALIASES.items():
+        if needle in folded:
+            terms.update(alias.casefold() for alias in aliases)
+    return terms
+
+
+def _context_items(question: str, limit: int) -> tuple[list[dict], str]:
+    if DAY_QUERY_RE.search(question):
+        today = datetime.now(DISPLAY_TZ).date()
+        items = [item for item in load_archive() if datetime.fromtimestamp(item["ts"], DISPLAY_TZ).date() == today]
+        coverage = f"saved archive for {today.isoformat()} (UTC+8 calendar day)"
+    else:
+        items = load_recent_news()
+        coverage = "saved recent-news window (not necessarily the full calendar day)"
+
+    terms = _question_terms(question)
+    if terms:
+        matched = []
+        unmatched = []
+        for item in items:
+            haystack = " ".join(str(item.get(field) or "") for field in ("title", "content", "summary")).casefold()
+            (matched if any(term in haystack for term in terms) else unmatched).append(item)
+        # Preserve relevant older records while still giving the model the latest surrounding context.
+        items = matched[-limit:] if matched else unmatched[-limit:]
+    else:
+        items = items[-limit:]
+    return items, coverage
+
+
+def build_context_snippet(limit: int = CONTEXT_SNIPPET_LIMIT, question: str = "") -> str:
+    items, coverage = _context_items(question, limit)
     if not items:
         return "(There is no recent flash-news record at the moment)"
-    lines = []
+    lines = [f"Coverage: {coverage}. Records supplied: {len(items)}."]
     for it in items:
-        clock = time.strftime("%Y-%m-%d %H:%M %Z", time.localtime(it["ts"]))
+        clock = datetime.fromtimestamp(it["ts"], DISPLAY_TZ).strftime("%Y-%m-%d %H:%M UTC+8")
         tier = it.get("tier") or "-"
+        source = it.get("source") or "unknown"
         title = it.get("title") or ""
         content = it.get("content") or ""
         head = " — ".join(str(value).strip().replace("\n", " ") for value in (title, content) if value)
-        lines.append(f"[{clock}] ({tier}) {head}")
+        if len(head) > 700:
+            head = head[:699] + "…"
+        lines.append(f"[{clock}] ({tier}) [{source}] {head}")
     return "\n".join(lines)
 
 
@@ -56,15 +103,24 @@ QA_PROMPT = """You are Heimdall, an elite AI advisor to Sir, specializing in cry
 3. Keep the following terms in their original English form without adding Chinese translations: geopolitical/place names (US, Israel, Ukraine, Taiwan, EU), financial institutions and key entities (Fed, OPEC, SEC, BRK, Trump), and technology/crypto/macro terms (Layer 2, Liquidity, FVG, CPI, PCE, Bullish).
 4. Do NOT output "中國台灣"; always use "台灣".
 5. Only use HTML tags <b>...</b>, <i>...</i>, and <code>...</code>. Do not use any other HTML tags or Markdown (for example, ** or #).
-6. Be concise and separate recorded facts from inference. Cite the timestamps of the relevant supplied flashes. Never claim the list is empty if it contains records. If records do not answer the question, say the available evidence is insufficient. General knowledge may explain conditional scenarios, but cannot establish current Fed policy, prices, technical patterns, or today's Bullish/Bearish bias. Do not invent current market conditions. State that the recent window is not necessarily the whole day's news.
-7. When separating facts and analysis into sections, use the exact headings <b>Known flash updates:</b> and <b>Heimdall's inference and judgement:</b>. Your name is Heimdall; always use that name when referring to yourself.
-8. Output only the final message to send to Sir. Do not output JSON or add any prefix or explanation.
+6. Answer the exact question in the first sentence. Do not merely restate headlines or give generic background. If the records cannot answer it, say so directly in the first sentence.
+7. Preserve actor-action-object attribution. An action by US, Trump, a market, or another counterparty is NOT an action by Iran merely because Iran is mentioned or affected. Never convert a proposal, reported intention, negotiation position, forecast, or reaction into a completed action.
+8. Use this compact decision-support structure:
+   <b>結論：</b> one direct sentence.
+   <b>已確認：</b> up to three relevant facts, each naming who did what and citing its UTC+8 timestamp. Omit unrelated records.
+   <b>市場含義：</b> one causal chain tied to the confirmed facts; label conditional analysis explicitly.
+   <b>接下來看：</b> one or two observable signals that would confirm or invalidate the assessment. Do not claim Heimdall will monitor them proactively.
+9. Separate recorded facts from inference. Never claim the supplied records are exhaustive. Respect the Coverage line: if it says recent-news window, state that it is not necessarily the whole day's news. General knowledge may explain conditional scenarios, but cannot establish current policy, prices, technical patterns, or today's Bullish/Bearish bias. Do not invent current market conditions.
+10. If there is no confirmed action by the entity asked about, explicitly say "目前保存資料未確認" and identify what the records actually establish. Do not pad the answer to sound complete.
+11. Your name is Heimdall; always use that name when referring to yourself.
+12. Output only the final message to send to Sir. Do not output JSON or add any prefix or explanation.
 """
 
+
 async def ask_gemini_qa(session: aiohttp.ClientSession, question: str) -> Optional[str]:
-    context = build_context_snippet()
+    context = build_context_snippet(question=question)
     if context == "(There is no recent flash-news record at the moment)":
-        return "目前讀不到有效的近期快訊紀錄，不代表市場沒有新聞。暫時無法根據即時資料判斷 Daily bias；請用 /status 檢查資料狀態，稍後再試。"
+        return "目前保存資料未確認可回答這個問題的紀錄。這不代表事件沒有發生，而是 Heimdall 的資料覆蓋不足；目前不做推測。"
     prompt = QA_PROMPT.format(context=context, question=question)
     return await call_gemini(session, prompt, timeout=30)
 

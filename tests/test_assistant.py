@@ -75,7 +75,7 @@ def test_context_snippet_honours_the_limit(tmp_path, monkeypatch):
     now = time.time()
     common.save_recent_news([{"ts": now, "title": f"t{i}", "content": "", "tier": "LOW"} for i in range(5)])
     lines = qa.build_context_snippet(limit=2).splitlines()
-    assert len(lines) == 2
+    assert len(lines) == 3
     assert "t4" in lines[-1]
 
 
@@ -104,10 +104,35 @@ def test_monitor_writes_are_visible_to_next_question(tmp_path, monkeypatch):
     assert "Detailed fresh evidence" in prompt
 
 
+def test_today_question_reads_current_utc8_archive_and_keeps_matching_entity(monkeypatch):
+    now = time.time()
+    monkeypatch.setattr(
+        qa,
+        "load_archive",
+        lambda: [
+            {"ts": now, "title": "Unrelated latest item", "content": "Other news"},
+            {"ts": now - 60, "title": "Iran negotiation", "content": "伊朗提出一項方案"},
+        ],
+    )
+
+    snippet = qa.build_context_snippet(limit=1, question="Iran 今天有甚麼重要行動")
+
+    assert "UTC+8 calendar day" in snippet
+    assert "Iran negotiation" in snippet
+    assert "Unrelated latest item" not in snippet
+
+
+def test_prompt_requires_direct_answer_and_correct_actor_attribution():
+    assert "Answer the exact question in the first sentence" in qa.QA_PROMPT
+    assert "actor-action-object" in qa.QA_PROMPT
+    assert "目前保存資料未確認" in qa.QA_PROMPT
+
+
 def test_empty_context_does_not_generate_market_claims(tmp_path, monkeypatch):
     monkeypatch.setattr(common, "NEWS_CONTEXT_FILE", tmp_path / "missing.json")
     model = AsyncMock()
     monkeypatch.setattr(qa, "call_gemini", model)
     answer = asyncio.run(qa.ask_gemini_qa(None, "Daily bias?"))
-    assert "不代表市場沒有新聞" in answer
+    assert "資料覆蓋不足" in answer
+    assert "目前不做推測" in answer
     model.assert_not_called()
