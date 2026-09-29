@@ -73,13 +73,14 @@ def test_load_keywords_reads_a_file_and_skips_comments(tmp_path, monkeypatch):
 
 def test_format_message_prefixes_only_the_badged_tiers():
     assert jm.format_message("body", "CRITICAL") == "CRITICAL\nbody"
+    assert jm.format_message("body", "HIGH") == "body"
     assert jm.format_message("body", "LOW") == "body"
     assert jm.format_message("body", None) == "body"
 
 
 def test_format_message_links_and_escapes_the_source():
     assert jm.format_message("body", "HIGH", source="News & Co", url="https://example.com/a?x=1&y=2") == (
-        'HIGH\nbody\n<a href="https://example.com/a?x=1&amp;y=2">來源：News &amp; Co</a>'
+        'body\n<a href="https://example.com/a?x=1&amp;y=2">來源：News &amp; Co</a>'
     )
 
 

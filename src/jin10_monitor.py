@@ -369,7 +369,7 @@ def remember_news(
 
 # ─── Message assembly ──────────────────────────────────────────────────────────
 
-TIER_BADGES = {"CRITICAL", "HIGH"}
+TIER_BADGES = {"CRITICAL"}
 DISCARDED_TIERS = {"MEDIUM", "LOW"}
 
 def format_message(summary: str, tier: Optional[str] = None, *, source: str = "", url: str = "") -> str:
