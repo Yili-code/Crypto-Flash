@@ -19,16 +19,18 @@ This project continuously watches the Jin10 WebSocket feed plus CoinDesk, Decryp
 <div align="center">
 <table>
 <tr>
-<td align="center" width="33%">
-<img src="../assets/demo001.jpg" width="100%"><br>
-<sub><b>Tiered Push</b><br>Gemini grades the event by importance</sub>
+<td align="center" width="50%">
+<img src="../assets/demo001.png" width="100%"><br>
+<sub><b>Event impact</b><br>Turns a market signal into crypto and macro context</sub>
 </td>
-<td align="center" width="33%">
-<img src="../assets/demo002.jpg" width="100%"><br>
-<sub><b>AI Real-time Q&A</b><br>Uses recent flash news as answer context</sub>
+<td align="center" width="50%">
+<img src="../assets/daily-digest.png" width="100%"><br>
+<sub><b>Daily digest</b><br>A roughly 30-second briefing of the day's important events</sub>
 </td>
 </tr>
 </table>
+<img src="../assets/command-menu.png" width="50%"><br>
+<sub><b>Query and tracking</b><br>Search recent news, track topics, review timelines, and ask Gemini questions</sub>
 </div>
 
 ---

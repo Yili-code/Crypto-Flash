@@ -16,9 +16,30 @@ The maintainer's instance has operated for about two months in a 10-member Teleg
 
 This is evidence that the system is being operated in a real group, not a claim that all 10 members are active users or that product-market fit has been established.
 
+### Telegram product surfaces
+
+The same pipeline supports three different time horizons:
+
+- **Minutes:** turn a high-impact event into concise crypto and macro context.
+- **Daily:** compress the day's important developments into a 30-second briefing.
+- **On demand:** search recent news, inspect important summaries, track topics, review timelines, and ask Gemini questions from Telegram.
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/demo001.png" alt="Crypto Flash translating a US Treasury yield signal into concise crypto and macro impact in Telegram"></td>
+    <td width="50%"><img src="assets/daily-digest.png" alt="Crypto Flash daily briefing summarizing important PCE and liquidity developments"></td>
+  </tr>
+  <tr>
+    <td><strong>Event impact</strong><br>Immediate context for a market-moving signal.</td>
+    <td><strong>Daily digest</strong><br>A short briefing across the day's important events.</td>
+  </tr>
+</table>
+
 <p align="center">
-  <img src="assets/demo001.jpg" width="720" alt="Crypto Flash Telegram delivery showing a high-priority macro event and concise market context">
+  <img src="assets/command-menu.png" width="563" alt="Crypto Flash Telegram command menu for news search, digests, topic tracking, timelines, updates, status, and Gemini analysis">
 </p>
+
+<p align="center"><strong>Query and tracking interface</strong><br>Recent context remains searchable and can be followed by topic.</p>
 
 ## Engineering decisions
 

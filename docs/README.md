@@ -19,16 +19,18 @@
 <div align="center">
 <table>
 <tr>
-<td align="center" width="33%">
-<img src="../assets/demo001.jpg" width="100%"><br>
-<sub><b>分級推播</b><br>Gemini 會依新聞重要性分級</sub>
+<td align="center" width="50%">
+<img src="../assets/demo001.png" width="100%"><br>
+<sub><b>事件影響</b><br>把市場訊號轉成加密貨幣與總體經濟脈絡</sub>
 </td>
-<td align="center" width="33%">
-<img src="../assets/demo002.jpg" width="100%"><br>
-<sub><b>AI 即時回覆</b><br>帶入近期快訊背景補充判斷</sub>
+<td align="center" width="50%">
+<img src="../assets/daily-digest.png" width="100%"><br>
+<sub><b>每日重點</b><br>用約 30 秒掌握當日重要事件</sub>
 </td>
 </tr>
 </table>
+<img src="../assets/command-menu.png" width="50%"><br>
+<sub><b>查詢與追蹤</b><br>搜尋近期新聞、追蹤主題、檢視時間線並向 Gemini 提問</sub>
 </div>
 
 ---
