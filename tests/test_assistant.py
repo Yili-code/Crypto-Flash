@@ -1,5 +1,6 @@
 import time
 import asyncio
+from datetime import datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -67,7 +68,7 @@ def test_context_snippet_formats_one_line_per_item(tmp_path, monkeypatch):
     line = qa.build_context_snippet()
     assert "(HIGH)" in line
     assert "美联储降息" in line
-    assert time.strftime("%H:%M", time.localtime(now)) in line
+    assert datetime.fromtimestamp(now, qa.DISPLAY_TZ).strftime("%H:%M") in line
 
 
 def test_context_snippet_honours_the_limit(tmp_path, monkeypatch):
