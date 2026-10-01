@@ -4,7 +4,23 @@ An automated crypto-news monitoring system that filters high-volume market updat
 
 [繁體中文完整文件](docs/README.md) · [Full English documentation](docs/README.en.md)
 
-## What it demonstrates
+## Why it exists
+
+Crypto markets produce more updates than a person can evaluate in real time. Crypto Flash is built for the minutes-level window: ingest continuously, remove low-value noise, add concise context, and deliver the result where a small community already talks.
+
+This is different from [News Agent](https://github.com/Yili-code/News-Agent), which produces a daily software, AI, and startup briefing. The two systems have different audiences, sources, and latency requirements.
+
+## Operating context
+
+The maintainer's instance has operated for about two months in a 10-member Telegram group as of October 2026. Improvements are currently founder-led: the maintainer proposes changes, discusses their value with the group, and refines the delivery format.
+
+This is evidence that the system is being operated in a real group, not a claim that all 10 members are active users or that product-market fit has been established.
+
+<p align="center">
+  <img src="assets/demo001.jpg" width="720" alt="Crypto Flash Telegram delivery showing a high-priority macro event and concise market context">
+</p>
+
+## Engineering decisions
 
 - Multi-source ingestion: Jin10 WebSocket plus curated crypto and official RSS feeds
 - A bounded processing queue that protects ingestion under back pressure
