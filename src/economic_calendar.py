@@ -13,6 +13,7 @@ from tg import TELEGRAM_CHAT_ID, send_telegram_message
 
 TAIPEI = timezone(timedelta(hours=8))
 WINDOW_DAYS = 3
+CALENDAR_RETRY_DELAYS = (30, 120)
 EVENT_LABELS = {
     "CPI m/m": "CPI",
     "CPI y/y": "CPI",
@@ -93,6 +94,37 @@ async def fetch_calendar(session: aiohttp.ClientSession) -> object:
         return await response.json(content_type=None)
 
 
+async def load_messages(session: aiohttp.ClientSession, day: date) -> list[str]:
+    """Fetch and validate the calendar without exposing intermediate failures."""
+    for attempt in range(len(CALENDAR_RETRY_DELAYS) + 1):
+        try:
+            return render_messages(select_events(await fetch_calendar(session), day), day)
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, TypeError) as exc:
+            if attempt == len(CALENDAR_RETRY_DELAYS):
+                raise RuntimeError(
+                    "Calendar unavailable after retries; delivery state was not advanced"
+                ) from exc
+            delay = CALENDAR_RETRY_DELAYS[attempt]
+            log.warning(
+                "Calendar unavailable (%s); retrying in %ss (attempt %s/%s)",
+                type(exc).__name__,
+                delay,
+                attempt + 2,
+                len(CALENDAR_RETRY_DELAYS) + 1,
+            )
+            await asyncio.sleep(delay)
+    raise AssertionError("Calendar retry loop exited unexpectedly")
+
+
+def render_unavailable_notice(day: date) -> str:
+    last_day = day + timedelta(days=WINDOW_DAYS - 1)
+    end_label = last_day.strftime("%m/%d" if day.year == last_day.year else "%Y/%m/%d")
+    return (
+        f"<b>Event Reminder</b>\n{day:%Y/%m/%d}–{end_label} · Taiwan Time\n\n"
+        "Calendar data unavailable after retries."
+    )
+
+
 async def main(*, dry_run: bool = False) -> None:
     day = datetime.now(TAIPEI).date()
     try:
@@ -105,16 +137,14 @@ async def main(*, dry_run: bool = False) -> None:
         return
     async with aiohttp.ClientSession() as session:
         try:
-            messages = render_messages(select_events(await fetch_calendar(session), day), day)
-        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, TypeError) as exc:
-            last_day = day + timedelta(days=WINDOW_DAYS - 1)
-            notice = (f"<b>Event Reminder</b>\n{day:%Y/%m/%d}–{last_day:%Y/%m/%d} · 台灣時間\n\n"
-                      "資料不完整或暫時無法取得。\n不能判定是否有事件。")
+            messages = await load_messages(session, day)
+        except RuntimeError:
+            notice = render_unavailable_notice(day)
             if dry_run:
                 print(notice)
             else:
                 await send_telegram_message(session, TELEGRAM_CHAT_ID, notice)
-            raise RuntimeError("Calendar unavailable; delivery state was not advanced") from exc
+            raise
         if dry_run:
             print("\n\n".join(messages))
             return

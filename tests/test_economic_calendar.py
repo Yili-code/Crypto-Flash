@@ -78,6 +78,9 @@ def delivery(tmp_path, monkeypatch):
     monkeypatch.setattr(ec, "STATE_FILE", tmp_path / "state.json")
     monkeypatch.setattr(ec, "fetch_calendar", AsyncMock(return_value=[entry()]))
     monkeypatch.setattr(ec, "select_events", lambda payload, day: [])
+    monkeypatch.setattr(ec, "CALENDAR_RETRY_DELAYS", (0, 0))
+    sleeper = AsyncMock()
+    monkeypatch.setattr(ec.asyncio, "sleep", sleeper)
     sender = AsyncMock(return_value=True)
     monkeypatch.setattr(ec, "send_telegram_message", sender)
     return sender
@@ -98,12 +101,29 @@ def test_send_failure_does_not_save(delivery):
     assert not ec.STATE_FILE.exists()
 
 
-def test_fetch_failure_sends_unavailable_not_none(delivery, monkeypatch):
-    monkeypatch.setattr(ec, "fetch_calendar", AsyncMock(side_effect=ValueError("bad feed")))
+def test_fetch_failure_notifies_only_after_all_retries_and_does_not_save(delivery, monkeypatch):
+    fetcher = AsyncMock(side_effect=ValueError("bad feed"))
+    monkeypatch.setattr(ec, "fetch_calendar", fetcher)
     with pytest.raises(RuntimeError, match="unavailable"):
         asyncio.run(ec.main())
-    assert "不能判定" in delivery.call_args.args[2]
+    assert fetcher.await_count == 3
+    assert ec.asyncio.sleep.await_count == 2
+    delivery.assert_awaited_once()
+    notice = delivery.call_args.args[2]
+    assert "Calendar data unavailable after retries." in notice
+    assert "Taiwan Time" in notice
+    assert "資料不完整" not in notice
     assert not ec.STATE_FILE.exists()
+
+
+def test_transient_fetch_failure_recovers_and_delivers(delivery, monkeypatch):
+    fetcher = AsyncMock(side_effect=[ValueError("temporary"), [entry()]])
+    monkeypatch.setattr(ec, "fetch_calendar", fetcher)
+    asyncio.run(ec.main())
+    assert fetcher.await_count == 2
+    ec.asyncio.sleep.assert_awaited_once_with(0)
+    delivery.assert_awaited_once()
+    assert json.loads(ec.STATE_FILE.read_text())["last_sent_date"] == datetime.now(ec.TAIPEI).date().isoformat()
 
 
 def test_dry_run_does_not_send_or_save(delivery, capsys):
