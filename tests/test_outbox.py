@@ -13,6 +13,22 @@ def test_enqueue_drops_the_oldest_item_when_the_outbox_is_full():
     assert asyncio.run(scenario()) == [2, 3]
 
 
+def test_enqueue_records_received_item_and_queue_high_water(monkeypatch):
+    received = []
+    sizes = []
+    monkeypatch.setattr(jm.metrics, "observe_received", lambda item: received.append(item["id"]))
+    monkeypatch.setattr(jm.metrics, "observe_queue_size", sizes.append)
+
+    async def scenario():
+        outbox = asyncio.Queue(maxsize=2)
+        jm.enqueue_item(outbox, {"id": 1})
+        jm.enqueue_item(outbox, {"id": 2})
+
+    asyncio.run(scenario())
+    assert received == [1, 2]
+    assert sizes == [1, 2]
+
+
 def test_enqueue_never_blocks_the_receive_loop():
     # A blocking put here would stall ws.recv() until jin10 drops the connection.
     async def scenario():

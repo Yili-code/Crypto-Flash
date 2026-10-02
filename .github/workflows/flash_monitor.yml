@@ -57,5 +57,5 @@ jobs:
         if: always()
         uses: ./.github/actions/persist-state
         with:
-          paths: data/recent_news.json data/news_archive.json data/event_tracking.json data/gemini_live_usage.json data/feed_seen.json
+          paths: data/recent_news.json data/news_archive.json data/event_tracking.json data/gemini_live_usage.json data/feed_seen.json data/monitoring_daily.json
           message: "chore(state): update recent news context [skip ci]"

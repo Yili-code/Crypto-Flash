@@ -23,6 +23,7 @@ from common import (
     save_recent_news,
 )
 from gemini import GEMINI_API_KEY, call_gemini, test_gemini_connection
+from monitoring_metrics import RECEIVED_AT_KEY, metrics
 from news_archive import archive_news
 from tg import TELEGRAM_BOT_TOKEN_01, TELEGRAM_CHAT_ID, send_telegram_message
 
@@ -234,9 +235,11 @@ def get_ws_connect_kwargs() -> dict:
 
 seen_ids: dict[str, None] = {}
 
-def is_new(item: dict) -> bool:
+def is_new(item: dict, *, track_duplicate: bool = False) -> bool:
     fid = str(item.get("id", ""))
     if not fid or fid in seen_ids:
+        if track_duplicate and fid:
+            metrics.increment("duplicates_blocked")
         return False
     seen_ids[fid] = None
     if len(seen_ids) > 2000:
@@ -398,6 +401,7 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
         return
     if not match_keywords(article_text):
         return
+    metrics.increment("keyword_filter_passed")
     full_text = f"Source: {source}\n{article_text}"
 
     log.info("Keyword match: %s", (title or content)[:60])
@@ -407,6 +411,7 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
     if GEMINI_API_KEY and GEMINI_AVAILABLE:
         result = await summarize_with_gemini(session, full_text)
         if result is None:
+            metrics.increment("gemini_failures")
             GEMINI_AVAILABLE = False
             # Gemini failed; skip this item entirely instead of broadcasting raw content
             log.warning("Gemini tiering failed; skipping push: %s", (title or content)[:60])
@@ -433,13 +438,19 @@ async def handle_item(session: aiohttp.ClientSession, item: dict) -> None:
 
     msg = format_message(summary, tier=tier, source=source, url=url)
     ok = await send_telegram_message(session, TELEGRAM_CHAT_ID, msg, TELEGRAM_BOT_TOKEN_01)
+    if ok:
+        metrics.record_push(tier, item.get(RECEIVED_AT_KEY))
+    else:
+        metrics.increment("telegram_delivery_failures")
     log.info("Telegram send %s", "successful" if ok else "failed")
 
 
 def enqueue_item(outbox: "asyncio.Queue[dict]", item: dict) -> None:
     """Never block the receive loop: if the worker is behind, drop the oldest item."""
+    metrics.observe_received(item)
     try:
         outbox.put_nowait(item)
+        metrics.observe_queue_size(outbox.qsize())
     except asyncio.QueueFull:
         try:
             dropped = outbox.get_nowait()
@@ -449,6 +460,7 @@ def enqueue_item(outbox: "asyncio.Queue[dict]", item: dict) -> None:
             pass
         try:
             outbox.put_nowait(item)
+            metrics.observe_queue_size(outbox.qsize())
         except asyncio.QueueFull:
             log.warning("Outbox is still full; dropping the incoming flash item")
 
@@ -499,8 +511,10 @@ async def ws_loop(session: aiohttp.ClientSession, outbox: "asyncio.Queue[dict]")
                         continue
 
                     if code in {1000, 1100} and isinstance(data, dict):
-                        if data.get("action") in {1, 2} and is_new(data):
-                            enqueue_item(outbox, data)
+                        if data.get("action") in {1, 2}:
+                            metrics.observe_received(data)
+                            if is_new(data, track_duplicate=True):
+                                enqueue_item(outbox, data)
                     elif code == 1200 and isinstance(data, list):
                         # When the connection opens, a batch of historical flash news is sent; it is only used to warm the deduplication cache, not processed individually to avoid duplicate spam
                         if not skipped_initial_list:
@@ -511,8 +525,10 @@ async def ws_loop(session: aiohttp.ClientSession, outbox: "asyncio.Queue[dict]")
                             log.info("Initial historical list warmed for deduplication: %d entries", len(data))
                             continue
                         for entry in data:
-                            if isinstance(entry, dict) and entry.get("action") in {1, 2} and is_new(entry):
-                                enqueue_item(outbox, entry)
+                            if isinstance(entry, dict) and entry.get("action") in {1, 2}:
+                                metrics.observe_received(entry)
+                                if is_new(entry, track_duplicate=True):
+                                    enqueue_item(outbox, entry)
         except asyncio.TimeoutError:
             log.warning("WebSocket received no messages for %.0fs; reconnecting", WS_IDLE_TIMEOUT)
             await asyncio.sleep(WS_RECONNECT_DELAY)

@@ -31,6 +31,7 @@ data/
 !data/economic_calendar_state.json
 !data/event_tracking.json
 !data/feed_seen.json
+!data/monitoring_daily.json
 *.csv
 *.sqlite3
 

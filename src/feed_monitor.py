@@ -13,6 +13,7 @@ from xml.etree import ElementTree
 import aiohttp
 
 from common import BASE_DIR, get_logger
+from monitoring_metrics import metrics
 
 FEEDS_FILE = Path(os.getenv("NEWS_FEEDS_FILE", str(BASE_DIR / "config" / "news_feeds.json")))
 FEED_STATE_FILE = Path(os.getenv("FEED_STATE_FILE", str(BASE_DIR / "data" / "feed_seen.json")))
@@ -142,6 +143,7 @@ async def poll_once(
             continue
         known = set(state[feed["name"]])
         new_items = [item for item in items if item["id"] not in known]
+        metrics.observe_batch(items, duplicates=len(items) - len(new_items))
         for item in reversed(new_items):
             await emit(item)
         combined = list(dict.fromkeys(current_ids + state[feed["name"]]))[:MAX_SEEN_PER_FEED]

@@ -3,6 +3,7 @@ import pytest
 import tg
 import yt_monitor
 import gemini_policy
+import monitoring_metrics
 
 
 @pytest.fixture(autouse=True)
@@ -16,6 +17,9 @@ def _isolated_youtube_progress(tmp_path, monkeypatch):
     monkeypatch.setenv("GEMINI_YOUTUBE_DAILY_REQUESTS", "120")
     monkeypatch.setenv("GEMINI_LIVE_DAILY_REQUESTS", "600")
     monkeypatch.setattr(gemini_policy.random, "uniform", lambda a, b: 1.0)
+    monkeypatch.setattr(monitoring_metrics.metrics, "path", tmp_path / "monitoring_daily.json")
+    monkeypatch.setattr(monitoring_metrics.metrics, "_document", None)
+    monkeypatch.setattr(monitoring_metrics.metrics, "_disabled", False)
 
 
 @pytest.fixture(autouse=True)
