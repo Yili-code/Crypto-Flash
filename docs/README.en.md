@@ -6,11 +6,10 @@
 
 This project continuously watches the Jin10 WebSocket feed plus CoinDesk, Decrypt, SEC, CFTC, and Federal Reserve RSS/Atom feeds. When a news item matches your keywords, Gemini grades and summarizes it, then the result is pushed to Telegram. You can also ask questions directly in Telegram, and the bot will use recent monitored flash news as background context.
 
-[![GitHub Actions](https://img.shields.io/badge/Automation-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.)
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](.)
-[![Gemini](https://img.shields.io/badge/AI-Gemini-8E75B2?logo=googlegemini&logoColor=white)](.)
-[![Telegram](https://img.shields.io/badge/Push-Telegram-26A5E4?logo=telegram&logoColor=white)](.)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![CI](https://github.com/Yili-code/Crypto-Flash/actions/workflows/ci.yml/badge.svg)](https://github.com/Yili-code/Crypto-Flash/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Gemini](https://img.shields.io/badge/AI-Gemini-8E75B2?logo=googlegemini&logoColor=white)](https://ai.google.dev/)
+[![Telegram](https://img.shields.io/badge/Push-Telegram-26A5E4?logo=telegram&logoColor=white)](https://core.telegram.org/bots)
 
 **English | [繁體中文](README.md)**
 
@@ -250,7 +249,7 @@ Before running it, add the channels to `config/yt_channels.json`. The script pro
 
 ## GitHub Actions deployment
 
-This project includes five workflows:
+The public monitoring and verification path uses five workflows:
 
 | Workflow | Purpose |
 |---|---|
@@ -258,6 +257,7 @@ This project includes five workflows:
 | `yt_monitor.yml` | Runs `src/yt_monitor.py` to monitor YouTube videos and push summaries |
 | `ci.yml` | Runs `ruff` and `pytest` on push / PR; uses no secrets |
 | `daily_digest.yml` | Sends yesterday's roundup at 08:15 UTC+8 and persists the delivery date |
+| `economic_calendar.yml` | Sends a three-day economic calendar at 08:00 UTC+8 and persists delivery state |
 
 Set these in GitHub `Settings → Secrets and variables → Actions`:
 
@@ -350,6 +350,14 @@ ruff check .    # static checks
 ```
 
 The suite covers Jin10 flash parsing and the binary WebSocket protocol, the outbox back-pressure behaviour, Telegram retry and throttling logic, YouTube RSS parsing and the dedup state machine, and Q&A question detection. It also covers news queries, digest dates and summary deduplication, digest delivery state, event unread progress and delivery acknowledgment, and Gemini recovery. No API keys are required and no network requests are made.
+
+---
+
+## Contributing
+
+To report a reproducible problem or propose a focused improvement, open an [issue](https://github.com/Yili-code/Crypto-Flash/issues) and read [CONTRIBUTING.md](../CONTRIBUTING.md). Parser fixtures, failure-path tests, documentation corrections, and permitted RSS/Atom feeds are useful starting points.
+
+The project is released under the [MIT License](../LICENSE). Use, modification, and redistribution are allowed when the copyright and license notice are retained.
 
 ---
 

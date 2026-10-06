@@ -6,11 +6,10 @@
 
 這個專案會持續監控 Jin10 WebSocket，以及 CoinDesk、Decrypt、SEC、CFTC、Federal Reserve 的 RSS/Atom。新聞命中你的關鍵字時，會交給 Gemini 進行分級與摘要，並自動推播到 Telegram。你也可以直接在 Telegram 提問，系統會把近期已監控的快訊背景一併納入回答。
 
-[![GitHub Actions](https://img.shields.io/badge/自動化-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.)
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](.)
-[![Gemini](https://img.shields.io/badge/AI-Gemini-8E75B2?logo=googlegemini&logoColor=white)](.)
-[![Telegram](https://img.shields.io/badge/推播-Telegram-26A5E4?logo=telegram&logoColor=white)](.)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![CI](https://github.com/Yili-code/Crypto-Flash/actions/workflows/ci.yml/badge.svg)](https://github.com/Yili-code/Crypto-Flash/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Gemini](https://img.shields.io/badge/AI-Gemini-8E75B2?logo=googlegemini&logoColor=white)](https://ai.google.dev/)
+[![Telegram](https://img.shields.io/badge/推播-Telegram-26A5E4?logo=telegram&logoColor=white)](https://core.telegram.org/bots)
 
 **[English](README.en.md) | 繁體中文**
 
@@ -126,7 +125,7 @@ Gemini 觀看影片並依影片內容彈性整理摘要並查證關鍵論點
 Telegram 推播摘要與來源連結
 ```
 
-首次執行某個頻道時，程式只會把 RSS 中現有影片寫入 `data/yt_seen_ids.json` 作為預熱，不會推播既有影片。之後抓到的新影片全部保存至待處理清單，`max_new_per_run` 只限制該頻道單次嘗試的影片數（包含重試），不會因超過上限而標記已讀或丟棄。即使 Gemini 摘要失敗，仍會推送影片連結。
+首次執行某個頻道時，程式只會把 RSS 中現有影片寫入 `data/yt_seen_ids.json` 作為預熱，不會推播既有影片。之後抓到的新影片全部保存至待處理清單，`max_new_per_run` 只限制該頻道單次嘗試的影片數（包含重試），不會因超過上限而標記已讀或丟棄。Gemini 摘要失敗時不會推送影片連結；項目會保留待處理並於後續排程重試。
 
 每輪先抓取並保存所有頻道，再以每頻道一部的方式輪流處理，例如 A1 → B1 → C1 → A2 → B2 → C2。每次嘗試前將下一個頻道寫入 `data/yt_schedule.json`，中斷後接續；完整跑完也會輪換下次起始頻道。預設 21 分鐘停止本輪處理，剩餘影片留待後續排程。Telegram 暫時不可用時仍保存新片。此機制只能保留已抓到的影片，停機期間已離開 RSS、從未被抓到的影片無法自動補回；舊版曾因上限標記已讀的影片也不會自動回播。
 
@@ -262,7 +261,7 @@ python src/yt_monitor.py
 
 ## GitHub Actions 部署
 
-本專案已包含五個 workflow：
+公開的快訊監控與驗證流程包含五個 workflow：
 
 | Workflow | 作用 |
 |---|---|
@@ -270,6 +269,7 @@ python src/yt_monitor.py
 | `yt_monitor.yml` | 執行 `src/yt_monitor.py`，監控 YouTube 新影片並推播摘要 |
 | `ci.yml` | push / PR 時執行 `ruff` 與 `pytest`，不使用任何 secret |
 | `daily_digest.yml` | 每日台灣時間 08:15 推送昨日重點，保存送出日期以避免重複 |
+| `economic_calendar.yml` | 每日台灣時間 08:00 推送三天經濟日曆，保存送達狀態 |
 
 在 GitHub 的 `Settings → Secrets and variables → Actions` 中新增：
 
@@ -360,6 +360,14 @@ ruff check .    # 靜態檢查
 ```
 
 測試涵蓋 Jin10 快訊解析與 WebSocket 二進位協定、推播佇列的背壓行為、Telegram 送出的重試與限流邏輯、YouTube RSS 解析與去重狀態機，以及問答的提問判定。此外涵蓋新聞查詢、日報日期與摘要去重、日報送出狀態、事件追蹤的未讀進度與發送確認，以及 Gemini 故障恢復。測試不需要任何 API 金鑰，也不會發出任何網路請求。
+
+---
+
+## 參與貢獻
+
+若要回報可重現問題或提出範圍明確的改善，請建立 [Issue](https://github.com/Yili-code/Crypto-Flash/issues) 並閱讀 [CONTRIBUTING.md](../CONTRIBUTING.md)。解析器 fixture、失敗路徑測試、文件修正，以及具來源授權的 RSS/Atom feed 都是合適的切入點。
+
+本專案採用 [MIT License](../LICENSE)，允許使用、修改與再散布，但必須保留版權與授權聲明。
 
 ---
 

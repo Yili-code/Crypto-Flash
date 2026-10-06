@@ -1,6 +1,0 @@
-.local/
-.dev.vars
-node_modules/
-.wrangler/
-wrangler.toml
-__pycache__/

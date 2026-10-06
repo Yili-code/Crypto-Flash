@@ -1,8 +1,11 @@
 # Crypto Flash
 
-An automated crypto-news monitoring system that filters high-volume market updates, uses Gemini to classify and summarize relevant events, and delivers actionable context through Telegram.
+**A self-hosted Python pipeline that filters real-time market news, uses Gemini to rank and summarize high-impact events, and delivers the result to Telegram.**
 
-[繁體中文完整文件](docs/README.md) · [Full English documentation](docs/README.en.md)
+[Output demo](docs/demo.md) · [繁體中文文件](docs/README.md) · [Full English documentation](docs/README.en.md) · [Daily digest behavior](docs/daily-digest.md)
+
+[![CI](https://github.com/Yili-code/Crypto-Flash/actions/workflows/ci.yml/badge.svg)](https://github.com/Yili-code/Crypto-Flash/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 ## Why it exists
 
@@ -10,9 +13,11 @@ Crypto markets produce more updates than a person can evaluate in real time. Cry
 
 This is different from [News Agent](https://github.com/Yili-code/News-Agent), which produces a daily software, AI, and startup briefing. The two systems have different audiences, sources, and latency requirements.
 
+Crypto Flash is for developers and market researchers who want a personal crypto and macro news monitor without operating a separate server. It is not a trading system, price feed, or investment-advice service.
+
 ## Operating context
 
-The maintainer's instance has operated for about two months in a 10-member Telegram group as of October 2026. Improvements are currently founder-led: the maintainer proposes changes, discusses their value with the group, and refines the delivery format.
+The maintainer's instance has operated for about two months in a 10-member Telegram group as of October 2026. Improvements are currently maintainer-led: the maintainer proposes changes, discusses their value with the group, and refines the delivery format.
 
 This is evidence that the system is being operated in a real group, not a claim that all 10 members are active users or that product-market fit has been established.
 
@@ -41,66 +46,101 @@ The same pipeline supports three different time horizons:
 
 <p align="center"><strong>Query and tracking interface</strong><br>Recent context remains searchable and can be followed by topic.</p>
 
-## Engineering decisions
+[See what these screenshots prove, what they do not prove, and how to reproduce the output.](docs/demo.md)
 
-- Multi-source ingestion: Jin10 WebSocket plus curated crypto and official RSS feeds
-- A bounded processing queue that protects ingestion under back pressure
-- Gemini-based relevance grading, summaries, and background recovery
-- Telegram delivery with throttling and rate-limit retries
-- Searchable recent news, daily digests, and topic timelines
-- YouTube RSS monitoring with persistent deduplication state
-- Scheduled GitHub Actions with conflict-aware state persistence
-- Offline unit tests that require no API keys or network access
+## What it does
 
-## System flow
+- Ingests Jin10 WebSocket messages and configurable HTTPS RSS/Atom feeds.
+- Filters by built-in or user-supplied keywords before spending Gemini requests.
+- Retains and delivers only `CRITICAL` and `HIGH` classified flashes; `MEDIUM` and `LOW` are discarded.
+- Sends Telegram alerts, answers questions with recent monitored context, and exposes `/news`, `/search`, `/important`, `/digest`, and event-tracking commands.
+- Monitors configured YouTube channels and sends a summary only after successful parsing; external claim verification may arrive later as a supplement.
+- Runs locally or on the included GitHub Actions schedules, with persisted deduplication and delivery state.
+- Includes offline tests for parsing, retries, back pressure, deduplication, Telegram commands, digests, event tracking, and Gemini recovery.
+
+## How it works
 
 ```text
 Jin10 WebSocket ─┐
-Curated RSS/Atom ├→ normalize → filter → bounded queue
-                                  ↓
-                         Gemini classify/summarize
-                                  ↓
-                  archive context → Telegram delivery
-                         ↓
-            search, digest, tracking, and Q&A
+Curated RSS/Atom ├─> normalize ─> keyword filter ─> bounded queue
+                 │                                      │
+YouTube RSS ─────┘                              Gemini classify/summarize
+                                                        │
+                                      archive context ─> Telegram
+                                             │
+                                  search, digest, tracking, Q&A
 ```
+
+The bounded queue protects ingestion when downstream AI or Telegram calls slow down. Gemini outages pause summarized flash delivery instead of silently forwarding unreviewed content; unclassified matching items can still be retained as context. See the [complete operational behavior](docs/README.en.md) for retention windows, retry policy, and failure semantics.
 
 ## Quick start
 
-Requires Python 3.12 or newer.
+Requirements: Python 3.12, a Telegram bot and target chat, and a Gemini API key for classification, summaries, and Q&A.
 
 ```bash
 git clone https://github.com/Yili-code/Crypto-Flash.git
 cd Crypto-Flash
 python -m venv .venv
-
-# Windows PowerShell
-.\.venv\Scripts\Activate.ps1
-
-# macOS / Linux
-# source .venv/bin/activate
-
-python -m pip install -r requirements.txt
 ```
 
-Copy `.env.example` to `.env`, add the Telegram and Gemini values you need, then run the combined monitor and assistant:
+Activate the environment and install the dependencies:
+
+```powershell
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+```bash
+# macOS / Linux
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env
+```
+
+Set these values in `.env`:
+
+```env
+TELEGRAM_BOT_TOKEN_01="your-telegram-bot-token"
+TELEGRAM_CHAT_ID="your-chat-id"
+GEMINI_API_KEY="your-gemini-api-key"
+```
+
+Then start the combined flash monitor and Telegram assistant:
 
 ```bash
 python src/flash_service.py
 ```
 
-Individual services can also run independently. See the [complete setup guide](docs/README.en.md) for workflows, commands, environment variables, state retention, and operational caveats.
+Before enabling delivery, you can validate the configured RSS/Atom sources without changing seen state or sending a Telegram message:
 
-## Development checks
+```bash
+python src/feed_monitor.py
+```
+
+For YouTube monitoring, scheduled GitHub Actions, every Telegram command, and all environment variables, use the [English setup guide](docs/README.en.md) or [Traditional Chinese guide](docs/README.md).
+
+## Operational boundaries
+
+- GitHub Actions schedules can start late and the six-hour monitor jobs have restart gaps; this is not guaranteed 24/7 delivery.
+- Source outages, upstream format changes, queue pressure, and AI-provider failures can delay or omit alerts.
+- AI summaries may be incomplete or incorrect. Verify consequential claims against primary sources.
+- State files under `data/` are committed by the workflows. Review repository visibility and stored content before deployment.
+- Jin10 content remains the property of its source. Users are responsible for complying with upstream terms and applicable rules.
+
+## Development
+
+The test suite is designed to run without API keys or network access.
 
 ```bash
 python -m pip install -r requirements-dev.txt
-ruff check .
-pytest
+python -m ruff check .
+python -m pytest
 ```
 
-The CI workflow runs the same lint and test checks without secrets. Tests cover parsing, queue back pressure, retry behavior, deduplication, Telegram commands, digests, event tracking, and Gemini recovery.
+To report a reproducible problem or propose a focused change, open an [issue](https://github.com/Yili-code/Crypto-Flash/issues) and follow [CONTRIBUTING.md](CONTRIBUTING.md). Good first contributions include parser fixtures, failure-path tests, documentation corrections, and additional permitted RSS/Atom sources.
 
-## Important
+## License status
 
-AI-generated summaries are informational and may be incomplete or incorrect. This project is for technical learning and personal monitoring; it does not provide investment advice.
+Released under the [MIT License](LICENSE).
