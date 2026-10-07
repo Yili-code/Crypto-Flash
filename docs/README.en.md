@@ -181,6 +181,8 @@ python src/flash_service.py
 
 In a Telegram group, you can mention the bot or use `/ask`; in private chat, you can send a question directly.
 
+Q&A uses a mobile-friendly layout with four sections: conclusion, confirmed facts, market implications, and signals to watch. Headings stand alone, sections have blank lines, and short fact bullets place their source and full UTC+8 timestamp on a separate line. These are model output guidelines; actual length and formatting may vary.
+
 ### News queries and daily roundups
 
 | Command | Purpose |
