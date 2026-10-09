@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 # ─── Path ───────────────────────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 load_dotenv(BASE_DIR / ".env")
+STATE_DIR = Path(os.getenv("CRYPTOFLASH_STATE_DIR", str(BASE_DIR / "data")))
 
 # Windows consoles default to a legacy code page (cp950 for zh-TW), which mangles the
 # Simplified Chinese in flash-news logs and raises UnicodeEncodeError on emoji.
@@ -50,7 +50,7 @@ MAX_TIER_TO_SEND = resolve_max_tier(os.getenv("MAX_TIER_TO_SEND", "HIGH"))
 
 # ─── Recent News Context (written by monitor, read by qa; shared access logic to prevent format drift) ──
 
-NEWS_CONTEXT_FILE = Path(os.getenv("NEWS_CONTEXT_FILE", str(BASE_DIR / "data" / "recent_news.json")))
+NEWS_CONTEXT_FILE = Path(os.getenv("NEWS_CONTEXT_FILE", str(STATE_DIR / "recent_news.json")))
 CONTEXT_MAX_ITEMS = int(os.getenv("CONTEXT_MAX_ITEMS", "80"))
 CONTEXT_MAX_AGE_SEC = int(os.getenv("CONTEXT_MAX_AGE_SEC", str(6 * 3600)))
 

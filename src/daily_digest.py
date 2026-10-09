@@ -11,13 +11,13 @@ from pathlib import Path
 
 import aiohttp
 
-from common import BASE_DIR, TIER_RANK, get_logger
+from common import STATE_DIR, TIER_RANK, get_logger
 from gemini import call_gemini
 from news_archive import load_archive
 from tg import TELEGRAM_CHAT_ID, send_telegram_message
 
 DISPLAY_TZ = timezone(timedelta(hours=8))
-DIGEST_STATE_FILE = Path(os.getenv("DIGEST_STATE_FILE", str(BASE_DIR / "data" / "daily_digest_state.json")))
+DIGEST_STATE_FILE = Path(os.getenv("DIGEST_STATE_FILE", str(STATE_DIR / "daily_digest_state.json")))
 log = get_logger("daily-digest")
 
 

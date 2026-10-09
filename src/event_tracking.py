@@ -11,11 +11,11 @@ from datetime import datetime
 from html import escape, unescape
 from pathlib import Path
 
-from common import BASE_DIR, TIER_LEVELS
+from common import STATE_DIR, TIER_LEVELS
 from daily_digest import DISPLAY_TZ
 from news_archive import load_archive
 
-EVENT_STATE_FILE = Path(os.getenv("EVENT_STATE_FILE", str(BASE_DIR / "data" / "event_tracking.json")))
+EVENT_STATE_FILE = Path(os.getenv("EVENT_STATE_FILE", str(STATE_DIR / "event_tracking.json")))
 EVENT_COMMANDS = {"track", "untrack", "tracks", "timeline", "updates"}
 MAX_TOPICS = 12
 MAX_KEYWORD_LENGTH = 40

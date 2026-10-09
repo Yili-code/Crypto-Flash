@@ -4,6 +4,9 @@ import tg
 import yt_monitor
 import gemini_policy
 import monitoring_metrics
+import telegram_assistant
+import telegram_update_state
+import classification_backlog
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +23,11 @@ def _isolated_youtube_progress(tmp_path, monkeypatch):
     monkeypatch.setattr(monitoring_metrics.metrics, "path", tmp_path / "monitoring_daily.json")
     monkeypatch.setattr(monitoring_metrics.metrics, "_document", None)
     monkeypatch.setattr(monitoring_metrics.metrics, "_disabled", False)
+    monkeypatch.setattr(monitoring_metrics.metrics, "_dirty", False)
+    monkeypatch.setattr(monitoring_metrics.metrics, "_last_flush", 0.0)
+    monkeypatch.setattr(telegram_update_state, "UPDATE_STATE_FILE", tmp_path / "telegram_update_state.json")
+    monkeypatch.setattr(telegram_assistant, "OWNER_USER_IDS", set())
+    monkeypatch.setattr(classification_backlog, "BACKLOG_FILE", tmp_path / "classification_backlog.json")
 
 
 @pytest.fixture(autouse=True)

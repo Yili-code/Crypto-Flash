@@ -58,7 +58,7 @@
 - Telegram 推播：`src/tg.py`
 - Telegram 對話問答：`src/telegram_assistant.py`
 - YouTube 新影片監控與摘要：`src/yt_monitor.py`
-- 新聞查詢與狀態：`src/news_commands.py`，支援 `/news`、`/search`、`/important`、`/status`
+- 新聞查詢與狀態：`src/news_commands.py`，支援 `/news`、`/search`、`/important`、`/status`、`/health`
 - 每日重點：`src/daily_digest.py`，支援 `/digest` 查詢與每日 08:15（UTC+8）推播
 - 三天經濟日曆：獨立排程每日 08:00（台灣時間）通知美國 CPI（含核心）、非農就業、FOMC 決議／經濟預測／記者會，以台灣時間每行列出日期、時間與事件名稱；涵蓋今天、明天、後天；無符合事件時明確顯示日期範圍、篩選條件及「這三天沒有 CPI、非農或 FOMC」提示。
 
@@ -105,7 +105,7 @@ news_archive.json → 每日重點、事件時間線與追蹤進展
 
 RSS/Atom 清單位於 `config/news_feeds.json`，只接受 HTTPS；可用 `python src/feed_monitor.py` 檢查目前各來源是否可達及可解析，不會更新已讀狀態或發送 Telegram。已讀狀態保存在 `data/feed_seen.json`，避免每六小時重啟 workflow 時重複處理同一篇文章。新增來源的第一次抓取只預熱現有文章，之後的新文章才會進入共用佇列。
 
-Gemini 啟動檢查或執行中的摘要請求失敗時，快訊監控會暫停推播並在背景每 30 秒重新檢查連線，成功後自動恢復摘要推播。中斷期間仍接收快訊並保存符合關鍵字的新聞背景，不會改推原文；這些已略過的新聞不會在恢復後補發。未設定 API key 時也會暫停推播。這項恢復機制與 Jin10 WebSocket 原有的斷線重連分開運作。
+Gemini 啟動檢查或執行中的摘要請求失敗時，快訊監控會暫停推播並在背景每 30 秒重新檢查連線，成功後自動恢復摘要推播。中斷期間仍接收快訊並保存符合關鍵字的新聞背景，不會改推原文；新項目會進入有上限、具一小時 freshness window 的分類 backlog，恢復後只補處理仍具時效性的內容。未設定 API key 時也會暫停推播。這項恢復機制與 Jin10 WebSocket 原有的斷線重連分開運作。
 
 保存發生在推播門檻判斷與 Telegram 發送之前，因此「有紀錄」不等於「已推播」。只保留並推送 CRITICAL、HIGH；MEDIUM、LOW 分級快訊會在分級後立即丟棄，不保存至近期紀錄或歷史資料，也不推播。未分級資料仍會保留。佇列滿時會丟棄最舊待處理項目，這些項目不會進入保存流程。
 
@@ -208,6 +208,7 @@ python src/flash_service.py
 | `/search BTC` | 不分大小寫搜尋近期新聞的標題與內文；多字搜尋採完整詞組比對 |
 | `/important`、`/important 10` | 只查看 HIGH、CRITICAL 快訊 |
 | `/status` | 可查詢筆數、分級分布、最新紀錄時間 |
+| `/health` | 查看 Gemini block、YouTube pending 與 flash backlog |
 | `/help`、`/start` | 顯示指令分類索引 |
 | `/help news` | 展開新聞查詢的完整語法 |
 | `/help digest` | 展開每日重點的完整語法 |
@@ -253,6 +254,8 @@ python src/flash_service.py
 
 最多追蹤 **12 個主題**，每個詞組 **40 個字元**。設定的 `TELEGRAM_CHAT_ID` 聊天室共用一份清單與閱讀進度，聊天室內可發指令的成員都能管理它；未設定聊天室時，事件追蹤指令不開放。設定與進度保存在 `data/event_tracking.json`，由問答 workflow 單獨寫入並提交回 repository，因此也會受 repository 的可見性設定影響。本機可用 `EVENT_STATE_FILE` 指定其他保存位置。
 
+可用 `TELEGRAM_OWNER_USER_IDS` 設定逗號分隔的 Telegram user ID allowlist，限制付費 AI、health 與共用追蹤指令；新聞查詢仍可對設定聊天室開放。已完成的 Telegram update ID 會持久化，以降低排程重啟後重複回覆；若程式恰好在 Telegram 接受訊息後、receipt 落盤前中斷，仍可能重複一次。
+
 歷史資料受既有 **72 小時、5,000 則**上限限制；太久未查詢的進展可能已過期。GitHub 上只能看到 checkout 時已保存的新聞；沒有新紀錄不代表外界沒有新進展。若 Telegram 已收到訊息，但本機寫入或 GitHub 保存進度失敗，下次查詢仍可能重複出現該紀錄。
 
 ### 6. 啟動 YouTube 監控（可選）
@@ -285,6 +288,7 @@ python src/yt_monitor.py
 | `TELEGRAM_BOT_TOKEN_01` | Telegram Bot Token |
 | `TELEGRAM_BOT_TOKEN_02` | YouTube 監控使用的 Telegram Bot Token |
 | `TELEGRAM_CHAT_ID` | 推播目標聊天室或群組 ID |
+| `TELEGRAM_OWNER_USER_IDS` | 可選；允許使用付費 AI、health 與共用追蹤指令的 sender ID 清單 |
 | `GEMINI_MODEL` | 可選，預設為 `gemini-3.5-flash-lite` |
 
 `flash_monitor.yml` 會在每 6 小時排程一次；`yt_monitor.yml` 會在每小時的第 0 分與第 30 分執行一次。兩者都支援手動觸發 `workflow_dispatch`。
@@ -295,13 +299,15 @@ python src/yt_monitor.py
 
 `data/recent_news.json`（近期快訊上下文）與 `data/yt_seen_ids.json`（已推播影片）必須跨執行保留，否則問答會失去背景，YouTube 會重新預熱並略過當時 RSS 中的既有影片。
 
-這兩個檔案、日報的 `data/news_archive.json`、`data/daily_digest_state.json`，以及追蹤設定 `data/event_tracking.json`，由 `.github/actions/persist-state` 於每次執行結束時 **commit 回 repo**。快訊監控會在 350 分鐘後正常停止，留時間在 job 上限前保存資料：
+這兩個檔案、日報的 `data/news_archive.json`、`data/daily_digest_state.json`、追蹤設定 `data/event_tracking.json`、分類重試 `data/classification_backlog.json`，以及 Telegram receipt `data/telegram_update_state.json`，由 `.github/actions/persist-state` 於每次執行結束時 **commit 回 repo**。快訊監控會在 350 分鐘後正常停止，留時間在 job 上限前保存資料：
 
 - 每個檔案只有一個 workflow 會寫入，所以遇到 push 競態時會把自己的版本重放到最新的 tip，不會覆蓋別的 workflow 的變更。
 - 內容沒變就不會產生 commit；commit 訊息帶 `[skip ci]`，`ci.yml` 也忽略 `data/**`。
 - 寫入的 workflow 需要 `permissions: contents: write`。若你的 repo 設定為唯讀的 `GITHUB_TOKEN`，請在 `Settings → Actions → General → Workflow permissions` 改為 **Read and write permissions**。
 
 > 早期版本改用 GitHub Actions cache 保存這兩個檔案。cache 會在 7 天未使用後被淘汰、以 key 前綴模糊比對（曾因此還原到錯誤的項目），而且無法檢視內容，因此改為直接 commit。
+
+若需要 private state 或接近 always-on 的指令服務，請把 `CRYPTOFLASH_STATE_DIR` 指向 repository 外的 durable volume。`docker compose up -d flash` 預設使用 gitignored `runtime-data/`；這能避免新的 runtime state 進入 Git，但不會清除既有 Git history。GitHub Actions 因 runner 沒有 durable local disk，仍保留 repository-backed compatibility path。
 
 ---
 
@@ -313,10 +319,12 @@ python src/yt_monitor.py
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN_01` | 空 | Telegram Bot Token |
 | `TELEGRAM_CHAT_ID` | 空 | 推播目標 / 問答來源限制 |
+| `TELEGRAM_OWNER_USER_IDS` | 空 | 可選的 sender ID allowlist；限制付費 AI、health 與共用追蹤指令 |
 | `TELEGRAM_MIN_SEND_INTERVAL` | `3.5` | 兩則推播之間的最小間隔秒數，用來避開 Telegram 的 429 限流 |
 | `TELEGRAM_MAX_RETRY_AFTER` | `30` | 收到 429 時最多等待的秒數（Telegram 有時會要求數百秒） |
 | `GEMINI_API_KEY` | 空 | Gemini API 金鑰 |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | 生成模型 |
+| `CRYPTOFLASH_STATE_DIR` | `data` | runtime state 根目錄；always-on 部署應指向 repo 外的 durable volume |
 | `NEWS_CONTEXT_FILE` | `data/recent_news.json` | 近期快訊的共用上下文檔 |
 | `CONTEXT_MAX_AGE_SEC` | `21600` | 近期訊息保留秒數 |
 
@@ -334,6 +342,9 @@ python src/yt_monitor.py
 | `GEMINI_RECONNECT_DELAY` | `30` | Gemini 不可用時的背景重試間隔秒數，最小為 1 秒 |
 | `NEWS_ARCHIVE_FILE` | `data/news_archive.json` | 日報新聞保存位置，保留最近 72 小時、最多 5,000 則 |
 | `DIGEST_STATE_FILE` | `data/daily_digest_state.json` | 日報最近成功送出日期；由日報腳本寫入 |
+| `CLASSIFICATION_BACKLOG_MAX_ITEMS` | `500` | Gemini 分類重試最多保留的 fresh 快訊數 |
+| `CLASSIFICATION_BACKLOG_MAX_AGE_SEC` | `3600` | 分類重試時效秒數；過期項目不延遲推播 |
+| `MONITORING_FLUSH_INTERVAL` | `30` | metrics 批次寫入間隔秒數 |
 
 ### 問答腳本設定
 
@@ -341,6 +352,7 @@ python src/yt_monitor.py
 |---|---|---|
 | `CONTEXT_SNIPPET_LIMIT` | `40` | 回答問題時帶入的背景訊息數量 |
 | `EVENT_STATE_FILE` | `data/event_tracking.json` | 聊天室共用的事件追蹤清單與閱讀進度 |
+| `TELEGRAM_UPDATE_STATE_FILE` | `data/telegram_update_state.json` | 跨重啟保存的最後完成 Telegram update receipt |
 
 ### YouTube 監控設定
 

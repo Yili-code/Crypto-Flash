@@ -1,0 +1,19 @@
+services:
+  flash:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CRYPTOFLASH_STATE_DIR: /app/state
+    volumes:
+      - ./runtime-data:/app/state
+
+  youtube:
+    build: .
+    profiles: ["manual"]
+    env_file: .env
+    environment:
+      CRYPTOFLASH_STATE_DIR: /app/state
+    volumes:
+      - ./runtime-data:/app/state
+    command: ["python", "src/yt_monitor.py"]

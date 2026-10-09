@@ -6,9 +6,9 @@ import os
 import time
 from pathlib import Path
 
-from common import BASE_DIR, get_logger
+from common import STATE_DIR, get_logger
 
-ARCHIVE_FILE = Path(os.getenv("NEWS_ARCHIVE_FILE", str(BASE_DIR / "data" / "news_archive.json")))
+ARCHIVE_FILE = Path(os.getenv("NEWS_ARCHIVE_FILE", str(STATE_DIR / "news_archive.json")))
 ARCHIVE_MAX_AGE_SEC = 72 * 3600
 ARCHIVE_MAX_ITEMS = 5000
 log = get_logger("news-archive")
@@ -49,3 +49,19 @@ def archive_news(item: dict) -> None:
         temporary.replace(ARCHIVE_FILE)
     except OSError as exc:
         log.warning("Cannot save news archive: %s", exc)
+
+
+def remove_archived_news(news_id: str) -> None:
+    if not news_id:
+        return
+    items = load_archive()
+    remaining = [item for item in items if item.get("id") != news_id]
+    if len(remaining) == len(items):
+        return
+    try:
+        ARCHIVE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        temporary = ARCHIVE_FILE.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(remaining, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(ARCHIVE_FILE)
+    except OSError as exc:
+        log.warning("Cannot remove news from archive: %s", exc)

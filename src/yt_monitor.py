@@ -10,9 +10,10 @@ from typing import Optional
 
 import aiohttp
 
-from common import BASE_DIR, get_logger
+from common import BASE_DIR, STATE_DIR, get_logger
 from gemini import GEMINI_API_KEY, call_gemini
 from tg import TELEGRAM_BOT_TOKEN_02, TELEGRAM_CHAT_ID, check_chat_access, send_telegram_message
+from operational_health import current_scope_block
 
 log = get_logger("yt-monitor")
 
@@ -20,9 +21,9 @@ log = get_logger("yt-monitor")
 
 CHANNELS_CONFIG_FILE = Path(os.getenv("YT_CHANNELS_CONFIG", str(BASE_DIR / "config" / "yt_channels.json")))
 DEFAULT_MAX_NEW_PER_RUN = int(os.getenv("YT_MAX_NEW_PER_RUN", "3"))
-SEEN_STATE_FILE = Path(os.getenv("YT_SEEN_STATE_FILE", str(BASE_DIR / "data" / "yt_seen_ids.json")))
-PROGRESS_FILE = Path(os.getenv("YT_PROGRESS_FILE", str(BASE_DIR / "data" / "yt_progress.json")))
-SCHEDULE_FILE = Path(os.getenv("YT_SCHEDULE_FILE", str(BASE_DIR / "data" / "yt_schedule.json")))
+SEEN_STATE_FILE = Path(os.getenv("YT_SEEN_STATE_FILE", str(STATE_DIR / "yt_seen_ids.json")))
+PROGRESS_FILE = Path(os.getenv("YT_PROGRESS_FILE", str(STATE_DIR / "yt_progress.json")))
+SCHEDULE_FILE = Path(os.getenv("YT_SCHEDULE_FILE", str(STATE_DIR / "yt_schedule.json")))
 RUN_BUDGET_SECONDS = max(1, int(os.getenv("YT_RUN_BUDGET_SECONDS", "1260")))
 MAX_SEEN_IDS_PER_CHANNEL = int(os.getenv("YT_MAX_SEEN_IDS", "300"))
 
@@ -491,8 +492,14 @@ async def main() -> None:
     # Verify persistence before spending on summaries or delivering anything.
     save_seen_state(seen_state)
     save_progress(load_progress())
+    block = current_scope_block("youtube")
+    if block:
+        raise RuntimeError(f"YouTube Gemini scope is permanently blocked: {block}")
     async with aiohttp.ClientSession() as session:
         await run_channels(session, configs, seen_state)
+    block = current_scope_block("youtube")
+    if block:
+        raise RuntimeError(f"YouTube Gemini scope became permanently blocked: {block}")
 
 
 if __name__ == "__main__":

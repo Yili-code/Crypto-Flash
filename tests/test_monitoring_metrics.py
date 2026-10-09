@@ -6,7 +6,7 @@ import monitoring_metrics as mm
 def test_daily_metrics_records_funnel_delivery_latency_and_queue(tmp_path, monkeypatch):
     clock = iter([100.0, 100.2, 100.5])
     monkeypatch.setattr(mm.time, "time", lambda: next(clock))
-    recorder = mm.DailyMetrics(tmp_path / "monitoring.json")
+    recorder = mm.DailyMetrics(tmp_path / "monitoring.json", flush_interval_seconds=3600)
     item = {}
 
     recorder.observe_received(item)
@@ -16,6 +16,7 @@ def test_daily_metrics_records_funnel_delivery_latency_and_queue(tmp_path, monke
     recorder.observe_queue_size(2)
     recorder.record_push("HIGH", item[mm.RECEIVED_AT_KEY])
     recorder.record_push("CRITICAL", 100.0)
+    recorder.flush()
 
     day = next(iter(json.loads(recorder.path.read_text(encoding="utf-8"))["days"].values()))
     assert day["received_events"] == 1
@@ -26,12 +27,14 @@ def test_daily_metrics_records_funnel_delivery_latency_and_queue(tmp_path, monke
     }
     assert day["latency_ms"] == {"sample_count": 2, "p50": 350, "p95": 485}
     assert day["queue_high_water_mark"] == 3
+    assert day["queue_dropped_total"] == 0
 
 
 def test_observe_received_only_counts_an_item_once(tmp_path):
-    recorder = mm.DailyMetrics(tmp_path / "monitoring.json")
+    recorder = mm.DailyMetrics(tmp_path / "monitoring.json", flush_interval_seconds=3600)
     item = {}
     recorder.observe_received(item)
+    recorder.flush()
     recorder.observe_received(item)
 
     day = next(iter(json.loads(recorder.path.read_text(encoding="utf-8"))["days"].values()))
@@ -45,11 +48,29 @@ def test_retention_keeps_only_latest_days(tmp_path):
         "timezone": "Asia/Taipei",
         "days": {"2026-01-01": {}, "2026-01-02": {}, "2099-01-01": {}},
     }), encoding="utf-8")
-    recorder = mm.DailyMetrics(path, retention_days=2)
+    recorder = mm.DailyMetrics(path, retention_days=2, flush_interval_seconds=3600)
     recorder.increment("received_events")
+    recorder.flush()
 
     days = json.loads(path.read_text(encoding="utf-8"))["days"]
     assert len(days) == 2
     assert "2026-01-01" not in days
     assert "2026-01-02" not in days
     assert "2099-01-01" in days
+
+
+def test_metrics_batch_writes_until_flush(tmp_path, monkeypatch):
+    writes = []
+    original = mm.Path.write_text
+
+    def tracked_write(path, *args, **kwargs):
+        writes.append(path)
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(mm.Path, "write_text", tracked_write)
+    recorder = mm.DailyMetrics(tmp_path / "monitoring.json", flush_interval_seconds=3600)
+    for _ in range(100):
+        recorder.increment("received_events")
+    assert writes == []
+    recorder.flush()
+    assert len(writes) == 1

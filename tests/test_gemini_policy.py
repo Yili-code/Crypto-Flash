@@ -27,7 +27,7 @@ def call(session, scope='youtube', prompt='hello'):
 
 @pytest.mark.parametrize('status,data,category', [
     (429, {}, 'rate_limit'), (503, {}, 'provider_unavailable'), (500, {}, 'provider_unavailable'),
-    (408, {}, 'timeout'), (401, {}, 'authentication'), (403, {}, 'authentication'),
+    (408, {}, 'timeout'), (401, {}, 'authentication'), (403, {}, 'model_configuration'),
     (404, {}, 'model_configuration'), (400, {}, 'invalid_request'),
     (400, {'error': {'details': [{'reason': 'API_KEY_INVALID'}]}}, 'authentication'),
     (400, {'error': {'status': 'FAILED_PRECONDITION'}}, 'model_configuration'),
@@ -86,7 +86,7 @@ def test_scopes_have_independent_budgets(clock, monkeypatch):
 
 
 def test_key_change_unblocks_without_resetting_count(clock, monkeypatch):
-    session = FakeSession([FakeResponse(403), success()])
+    session = FakeSession([FakeResponse(401), success()])
     assert call(session) is None
     assert call(session) is None
     assert len(session.calls) == 1
@@ -97,7 +97,7 @@ def test_key_change_unblocks_without_resetting_count(clock, monkeypatch):
 
 
 def test_auth_block_survives_midnight_and_manual_revision_recovers(clock, monkeypatch):
-    session = FakeSession([FakeResponse(403), success()])
+    session = FakeSession([FakeResponse(401), success()])
     call(session)
     clock[0] += 86400
     assert call(session) is None

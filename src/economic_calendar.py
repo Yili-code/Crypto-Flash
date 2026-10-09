@@ -8,7 +8,7 @@ from html import escape
 
 import aiohttp
 
-from common import BASE_DIR, get_logger
+from common import STATE_DIR, get_logger
 from tg import TELEGRAM_CHAT_ID, send_telegram_message
 
 TAIPEI = timezone(timedelta(hours=8))
@@ -26,7 +26,7 @@ EVENT_LABELS = {
     "FOMC Press Conference": "FOMC 記者會",
 }
 CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
-STATE_FILE = BASE_DIR / "data" / "economic_calendar_state.json"
+STATE_FILE = STATE_DIR / "economic_calendar_state.json"
 log = get_logger("economic-calendar")
 
 

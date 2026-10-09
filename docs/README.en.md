@@ -58,7 +58,7 @@ This is a GitHub Actions-driven automation project for tracking and filtering Ji
 - Telegram push messaging: `src/tg.py`
 - Telegram Q&A listener: `src/telegram_assistant.py`
 - YouTube video monitoring and summaries: `src/yt_monitor.py`
-- News queries and freshness: `src/news_commands.py`, with `/news`, `/search`, `/important`, and `/status`
+- News queries and freshness: `src/news_commands.py`, with `/news`, `/search`, `/important`, `/status`, and `/health`
 - Daily roundups: `src/daily_digest.py`, with `/digest` queries and scheduled delivery at 08:15 UTC+8
 - Event tracking: `src/event_tracking.py`, with subscriptions, timelines, and unread updates
 - Historical news archive: `src/news_archive.py`, shared by roundups and event tracking
@@ -194,6 +194,7 @@ Q&A uses a mobile-friendly layout with four sections: conclusion, confirmed fact
 | `/search BTC` | Case-insensitive title/body search; multiple words match as a phrase |
 | `/important`, `/important 10` | HIGH and CRITICAL news only |
 | `/status` | Record counts, tier distribution, and latest record timestamp |
+| `/health` | Persisted pipeline health, blocked AI scopes, and pending work |
 | `/help`, `/start` | Command category index |
 | `/help news` | Full news-query syntax |
 | `/help digest` | Full daily-roundup syntax |
@@ -241,6 +242,8 @@ Updates are on demand, not additional automatic alerts. Reading progress advance
 
 Up to 12 topics of 40 characters each are supported. The configured `TELEGRAM_CHAT_ID` shares one topic list and progress state: members who can issue commands can manage it. Event commands are disabled without a configured chat. The assistant is the sole writer of `data/event_tracking.json` and commits it after each workflow run, so topic visibility follows repository visibility. Local installations may set `EVENT_STATE_FILE` to another path.
 
+Set `TELEGRAM_OWNER_USER_IDS` to a comma-separated allowlist to restrict paid AI commands, health details, and shared tracking state. Read-only news search remains available to the configured chat. Processed Telegram update IDs are persisted to reduce duplicate replies after scheduled restarts; a crash between Telegram acceptance and saving the receipt can still duplicate a response.
+
 The 72-hour/5,000-record archive and checkout snapshot still limit coverage. Old unread records can expire, and no new records does not prove there were no external developments. If a message arrives but state writing or persistence fails, a subsequent query can repeat it.
 
 ### 6. Run the YouTube monitor (optional)
@@ -273,6 +276,7 @@ Set these in GitHub `Settings → Secrets and variables → Actions`:
 | `TELEGRAM_BOT_TOKEN_01` | Telegram bot token |
 | `TELEGRAM_BOT_TOKEN_02` | Telegram bot token used by the YouTube monitor |
 | `TELEGRAM_CHAT_ID` | Target chat ID for pushes |
+| `TELEGRAM_OWNER_USER_IDS` | Optional comma-separated sender IDs allowed to use paid AI, health, and tracking commands |
 | `GEMINI_MODEL` | Optional; defaults to `gemini-3.5-flash-lite` |
 
 The Jin10 monitor workflow runs every 6 hours. `yt_monitor.yml` runs at minute 0 and minute 30 of every hour. Both workflows support manual `workflow_dispatch`.
@@ -283,13 +287,15 @@ Set `GEMINI_MODEL` as an Actions **Variable** and the other listed credentials/c
 
 `data/recent_news.json` (recent flash-news context) and `data/yt_seen_ids.json` (already-pushed videos) have to survive between runs. Without them, the Q&A bot loses its context and the YouTube monitor warms up again, skipping the videos currently in the feed.
 
-These files, along with `data/news_archive.json`, `data/daily_digest_state.json`, and `data/event_tracking.json`, are **committed back to the repository** by `.github/actions/persist-state` at the end of each run:
+These files, along with `data/news_archive.json`, `data/daily_digest_state.json`, `data/event_tracking.json`, `data/classification_backlog.json`, and `data/telegram_update_state.json`, are **committed back to the repository** by `.github/actions/persist-state` at the end of each run:
 
 - Each file has exactly one writing workflow, so on a push race the writer replays its own copy on top of the current tip instead of clobbering another workflow's changes.
 - Nothing is committed when the content did not change. Commit messages carry `[skip ci]`, and `ci.yml` ignores `data/**`.
 - The writing workflows need `permissions: contents: write`. If your repository is configured with a read-only `GITHUB_TOKEN`, switch `Settings → Actions → General → Workflow permissions` to **Read and write permissions**.
 
 > An earlier version kept these files in the GitHub Actions cache. Cache entries are evicted after 7 days of no use, are matched by key prefix (which silently restored the wrong entry), and cannot be inspected — hence the move to plain commits.
+
+For private or always-on deployment, set `CRYPTOFLASH_STATE_DIR` to a durable mounted directory outside the repository. `docker compose up -d flash` uses the gitignored `runtime-data/` mount. This removes new runtime data from source-control history and keeps the assistant alive continuously; it does not erase state already present in Git history. GitHub Actions keeps the repository-backed compatibility path because Actions runners have no durable local disk.
 
 ---
 
@@ -301,10 +307,12 @@ These files, along with `data/news_archive.json`, `data/daily_digest_state.json`
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN_01` | empty | Telegram Bot Token |
 | `TELEGRAM_CHAT_ID` | empty | Push target / source chat guard for Q&A |
+| `TELEGRAM_OWNER_USER_IDS` | empty | Optional sender-ID allowlist for paid AI, health, and shared tracking commands |
 | `TELEGRAM_MIN_SEND_INTERVAL` | `3.5` | Minimum seconds between two pushes, to stay under Telegram's rate limit |
 | `TELEGRAM_MAX_RETRY_AFTER` | `30` | Cap on the 429 backoff (Telegram sometimes asks for several minutes) |
 | `GEMINI_API_KEY` | empty | Gemini API key |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model to use |
+| `CRYPTOFLASH_STATE_DIR` | `data` | Runtime-state root; always-on deployments should use a durable volume outside the repository |
 | `NEWS_CONTEXT_FILE` | `data/recent_news.json` | Shared recent-news cache |
 | `CONTEXT_MAX_AGE_SEC` | `21600` | Max age for background context |
 
@@ -322,6 +330,9 @@ These files, along with `data/news_archive.json`, `data/daily_digest_state.json`
 | `GEMINI_RECONNECT_DELAY` | `30` | Background retry interval in seconds while Gemini is unavailable, clamped to at least 1 second |
 | `NEWS_ARCHIVE_FILE` | `data/news_archive.json` | Daily report archive, retaining 72 hours and up to 5,000 records |
 | `DIGEST_STATE_FILE` | `data/daily_digest_state.json` | Most recently delivered digest date, written by the digest script |
+| `CLASSIFICATION_BACKLOG_MAX_ITEMS` | `500` | Maximum fresh Gemini classification retries retained |
+| `CLASSIFICATION_BACKLOG_MAX_AGE_SEC` | `3600` | Retry freshness window; expired flashes remain ungraded and are never pushed late |
+| `MONITORING_FLUSH_INTERVAL` | `30` | Seconds between batched metrics writes |
 
 If the Gemini startup check or a summary request fails, flash pushes pause and a background task checks the connection every 30 seconds until it recovers. The monitor keeps receiving news and saving matching items as context, without forwarding raw text. Skipped items are not replayed after recovery. A missing API key also pauses pushes. This recovery task operates independently of the existing Jin10 WebSocket reconnect loop. An unset or blank `GEMINI_MODEL` uses the default model.
 
@@ -331,6 +342,7 @@ If the Gemini startup check or a summary request fails, flash pushes pause and a
 |---|---|---|
 | `CONTEXT_SNIPPET_LIMIT` | `40` | Number of recent items included in the answer prompt |
 | `EVENT_STATE_FILE` | `data/event_tracking.json` | Shared topic subscriptions and acknowledged reading progress |
+| `TELEGRAM_UPDATE_STATE_FILE` | `data/telegram_update_state.json` | Last completed Telegram update receipt used across restarts |
 
 ### YouTube monitor settings
 

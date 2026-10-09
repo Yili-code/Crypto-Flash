@@ -13,6 +13,23 @@ def test_enqueue_drops_the_oldest_item_when_the_outbox_is_full():
     assert asyncio.run(scenario()) == [2, 3]
 
 
+def test_enqueue_records_each_overload_drop(monkeypatch):
+    drops = []
+    monkeypatch.setattr(
+        jm.metrics,
+        "increment",
+        lambda field, amount=1: drops.append((field, amount)) if field == "queue_dropped_total" else None,
+    )
+
+    async def scenario():
+        outbox = asyncio.Queue(maxsize=1)
+        jm.enqueue_item(outbox, {"id": 1})
+        jm.enqueue_item(outbox, {"id": 2})
+
+    asyncio.run(scenario())
+    assert drops == [("queue_dropped_total", 1)]
+
+
 def test_enqueue_records_received_item_and_queue_high_water(monkeypatch):
     received = []
     sizes = []

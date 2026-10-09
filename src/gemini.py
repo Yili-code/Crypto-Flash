@@ -15,6 +15,18 @@ GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_M
 
 log = get_logger("gemini")
 _scope_locks = {}
+POLICY_IMPLEMENTATION_REVISION = "2"
+
+
+def current_config_id() -> str:
+    """Identify settings that make a permanent provider block safe to retry."""
+    value = ":".join((
+        GEMINI_API_KEY,
+        GEMINI_MODEL,
+        os.getenv("GEMINI_POLICY_REVISION", ""),
+        POLICY_IMPLEMENTATION_REVISION,
+    ))
+    return policy.fingerprint(value)
 
 
 async def call_gemini(session, prompt: str, *, usage_scope: str = "live", **kwargs) -> Optional[str]:
@@ -78,7 +90,7 @@ async def _call_gemini(
         }
 
     request_id = policy.fingerprint(json.dumps(payload, sort_keys=True, ensure_ascii=False))
-    config_id = policy.fingerprint(GEMINI_API_KEY + ":" + GEMINI_MODEL + ":" + os.getenv("GEMINI_POLICY_REVISION", ""))
+    config_id = current_config_id()
     reason = policy.reserve(usage_scope, config_id, request_id)
     if reason:
         log.info("Gemini [%s] request deferred: %s", usage_scope, reason)

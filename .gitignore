@@ -32,11 +32,15 @@ data/
 !data/event_tracking.json
 !data/feed_seen.json
 !data/monitoring_daily.json
+!data/classification_backlog.json
+!data/telegram_update_state.json
 *.csv
 *.sqlite3
 
 # Test & lint caches
 .tmp/
+runtime-data/
+output/
 .pytest_cache/
 .ruff_cache/
 

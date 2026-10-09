@@ -12,11 +12,11 @@ from xml.etree import ElementTree
 
 import aiohttp
 
-from common import BASE_DIR, get_logger
+from common import BASE_DIR, STATE_DIR, get_logger
 from monitoring_metrics import metrics
 
 FEEDS_FILE = Path(os.getenv("NEWS_FEEDS_FILE", str(BASE_DIR / "config" / "news_feeds.json")))
-FEED_STATE_FILE = Path(os.getenv("FEED_STATE_FILE", str(BASE_DIR / "data" / "feed_seen.json")))
+FEED_STATE_FILE = Path(os.getenv("FEED_STATE_FILE", str(STATE_DIR / "feed_seen.json")))
 FEED_POLL_INTERVAL = max(30.0, float(os.getenv("FEED_POLL_INTERVAL", "120")))
 FEED_TIMEOUT = max(1.0, float(os.getenv("FEED_TIMEOUT", "20")))
 MAX_SEEN_PER_FEED = 500

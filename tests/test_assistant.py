@@ -35,6 +35,16 @@ def test_private_messages_are_treated_as_questions():
     assert qa.extract_question("BTC?", "heimdall_bot", "private") == "BTC?"
 
 
+def test_owner_allowlist_protects_paid_and_mutating_commands(monkeypatch):
+    monkeypatch.setattr(qa, "OWNER_USER_IDS", {"123"})
+    assert qa.requires_owner("/ask BTC?", "bot", "group")
+    assert qa.requires_owner("/track BTC", "bot", "group")
+    assert qa.requires_owner("BTC?", "bot", "private")
+    assert not qa.requires_owner("/news", "bot", "group")
+    assert qa.sender_is_authorized(123)
+    assert not qa.sender_is_authorized(456)
+
+
 def test_start_help_and_blank_messages_are_ignored():
     for text in ("/start", "/help me", "", "   ", None):
         assert qa.extract_question(text, "heimdall_bot", "private") is None

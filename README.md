@@ -56,6 +56,7 @@ The same pipeline supports three different time horizons:
 - Sends Telegram alerts, answers questions with recent monitored context, and exposes `/news`, `/search`, `/important`, `/digest`, and event-tracking commands.
 - Monitors configured YouTube channels and sends a summary only after successful parsing; external claim verification may arrive later as a supplement.
 - Runs locally or on the included GitHub Actions schedules, with persisted deduplication and delivery state.
+- Exposes `/health` for persisted pipeline health, permanent Gemini blocks, and pending-work visibility.
 - Includes offline tests for parsing, retries, back pressure, deduplication, Telegram commands, digests, event tracking, and Gemini recovery.
 
 ## How it works
@@ -113,6 +114,14 @@ Then start the combined flash monitor and Telegram assistant:
 python src/flash_service.py
 ```
 
+For an always-on installation with private state outside Git, use the included container setup:
+
+```bash
+docker compose up -d flash
+```
+
+This stores runtime data in the gitignored `runtime-data/` directory. Run the optional YouTube worker from your scheduler with `docker compose --profile manual run --rm youtube`.
+
 Before enabling delivery, you can validate the configured RSS/Atom sources without changing seen state or sending a Telegram message:
 
 ```bash
@@ -127,6 +136,7 @@ For YouTube monitoring, scheduled GitHub Actions, every Telegram command, and al
 - Source outages, upstream format changes, queue pressure, and AI-provider failures can delay or omit alerts.
 - AI summaries may be incomplete or incorrect. Verify consequential claims against primary sources.
 - State files under `data/` are committed by the workflows. Review repository visibility and stored content before deployment.
+- GitHub Actions remains a compatibility deployment with restart gaps. The container path is the recommended boundary when command availability or private runtime state matters.
 - Jin10 content remains the property of its source. Users are responsible for complying with upstream terms and applicable rules.
 
 ## Development

@@ -29,8 +29,8 @@ def test_startup_failure_recovers_and_only_pushes_summaries(monkeypatch, monitor
 
     async def pause(delay):
         pauses.append(delay)
-        await jm.handle_item(None, {"data": {"content": "BTC raw news"}})
         if len(pauses) == 1:
+            await jm.handle_item(None, {"id": "one", "data": {"content": "BTC raw news"}})
             monitor.assert_not_awaited()
         else:
             raise asyncio.CancelledError
@@ -83,8 +83,11 @@ def test_medium_and_low_are_discarded_before_storage(monkeypatch, monitor, tier,
     }))
     remember = Mock()
     monkeypatch.setattr(jm, "remember_news", remember)
+    forget = Mock()
+    monkeypatch.setattr(jm, "forget_news", forget)
     asyncio.run(jm.handle_item(None, {"data": {"content": "BTC low priority"}}))
     remember.assert_not_called()
+    forget.assert_called_once_with("")
     monitor.assert_not_awaited()
 
 
@@ -119,6 +122,13 @@ def test_healthy_connection_does_not_send_extra_probes(monkeypatch, monitor):
 
 def test_non_object_summary_is_treated_as_failure(monkeypatch):
     monkeypatch.setattr(jm, "call_gemini", AsyncMock(return_value="[]"))
+    assert asyncio.run(jm.summarize_with_gemini(None, "BTC")) is None
+
+
+def test_summary_rejects_model_generated_links(monkeypatch):
+    monkeypatch.setattr(jm, "call_gemini", AsyncMock(return_value=(
+        '{"tier":"HIGH","relevant":true,"message":"<a href=\\"https://evil.example\\">click</a>"}'
+    )))
     assert asyncio.run(jm.summarize_with_gemini(None, "BTC")) is None
 
 

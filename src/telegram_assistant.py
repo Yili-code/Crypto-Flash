@@ -18,10 +18,17 @@ from tg import (
     get_bot_username,
     send_telegram_message,
 )
+import telegram_update_state as update_state
 
 log = get_logger("jin10-qa")
 
 CONTEXT_SNIPPET_LIMIT = int(os.getenv("CONTEXT_SNIPPET_LIMIT", "40"))
+OWNER_USER_IDS = {
+    value.strip()
+    for value in os.getenv("TELEGRAM_OWNER_USER_IDS", "").split(",")
+    if value.strip()
+}
+OWNER_ONLY_COMMANDS = {"ask", "digest", "health", "track", "tracks", "updates", "untrack"}
 DISPLAY_TZ = timezone(timedelta(hours=8))
 DAY_QUERY_RE = re.compile(r"(?:今天|今日|本日|today)", re.IGNORECASE)
 ENTITY_ALIASES = {
@@ -162,6 +169,17 @@ def extract_question(text: str, bot_username: str, chat_type: str) -> Optional[s
     return None
 
 
+def requires_owner(text: str, bot_username: str, chat_type: str) -> bool:
+    command = parse_command(text, bot_username)
+    if command:
+        return command[0] in OWNER_ONLY_COMMANDS
+    return extract_question(text, bot_username, chat_type) is not None
+
+
+def sender_is_authorized(user_id: object) -> bool:
+    return not OWNER_USER_IDS or str(user_id or "") in OWNER_USER_IDS
+
+
 async def build_reply(session: aiohttp.ClientSession, text: str, bot_username: str, chat_type: str) -> Optional[str]:
     digest = await digest_command_reply(session, text, bot_username)
     if digest is not None:
@@ -203,7 +221,8 @@ async def telegram_assistant_loop(session: aiohttp.ClientSession) -> None:
         log.info("Telegram Assistant listener started (bot username not available; in groups, use the /ask command)")
 
     url = f"{TELEGRAM_API}/getUpdates"
-    offset: Optional[int] = None
+    last_update_id = update_state.load_last_update_id()
+    offset: Optional[int] = last_update_id + 1 if last_update_id is not None else None
 
     while True:
         params = {"timeout": 30}
@@ -222,21 +241,45 @@ async def telegram_assistant_loop(session: aiohttp.ClientSession) -> None:
             await asyncio.sleep(5)
             continue
 
+        retry_from: Optional[int] = None
         for update in data.get("result", []):
-            offset = update["update_id"] + 1
+            update_id = update.get("update_id")
+            if type(update_id) is not int or update_id < 0:
+                log.warning("Ignoring Telegram update with invalid update_id")
+                continue
+            if last_update_id is not None and update_id <= last_update_id:
+                offset = last_update_id + 1
+                continue
             message = update.get("message") or update.get("edited_message") or {}
             chat = message.get("chat", {})
             chat_id = str(chat.get("id", ""))
             chat_type = str(chat.get("type", ""))
             text = message.get("text") or ""
             message_id = message.get("message_id")
+            user_id = (message.get("from") or {}).get("id")
 
             if TELEGRAM_CHAT_ID and chat_id != str(TELEGRAM_CHAT_ID):
+                update_state.save_last_update_id(update_id)
+                last_update_id = update_id
+                offset = update_id + 1
+                continue
+
+            if requires_owner(text, bot_username, chat_type) and not sender_is_authorized(user_id):
+                ok = await send_telegram_message(session, chat_id, "此指令僅限授權管理者使用。", reply_to=message_id)
+                if not ok:
+                    retry_from = update_id
+                    break
+                update_state.save_last_update_id(update_id)
+                last_update_id = update_id
+                offset = update_id + 1
                 continue
 
             event_reply = prepare_event_reply(text, bot_username)
             answer = event_reply.text if event_reply else await build_reply(session, text, bot_username, chat_type)
             if answer is None:
+                update_state.save_last_update_id(update_id)
+                last_update_id = update_id
+                offset = update_id + 1
                 continue
             ok = await send_telegram_message(session, chat_id, answer, reply_to=message_id)
             if ok and event_reply:
@@ -244,7 +287,18 @@ async def telegram_assistant_loop(session: aiohttp.ClientSession) -> None:
                     acknowledge_updates(event_reply)
                 except EventStateError as exc:
                     log.error("Event reply was sent but reading progress was not saved; updates may repeat: %s", exc)
+                    retry_from = update_id
+                    break
             log.info("Q&A response %s", "successful" if ok else "failed")
+            if not ok:
+                retry_from = update_id
+                break
+            update_state.save_last_update_id(update_id)
+            last_update_id = update_id
+            offset = update_id + 1
+        if retry_from is not None:
+            offset = retry_from
+            await asyncio.sleep(2)
 
 
 async def main() -> None:

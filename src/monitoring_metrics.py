@@ -7,10 +7,11 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from common import BASE_DIR, TIER_LEVELS, get_logger
+from common import STATE_DIR, TIER_LEVELS, get_logger
 
-METRICS_FILE = Path(os.getenv("MONITORING_METRICS_FILE", str(BASE_DIR / "data" / "monitoring_daily.json")))
+METRICS_FILE = Path(os.getenv("MONITORING_METRICS_FILE", str(STATE_DIR / "monitoring_daily.json")))
 RETENTION_DAYS = max(1, int(os.getenv("MONITORING_RETENTION_DAYS", "35")))
+FLUSH_INTERVAL_SECONDS = max(1.0, float(os.getenv("MONITORING_FLUSH_INTERVAL", "30")))
 TAIPEI = timezone(timedelta(hours=8))
 RECEIVED_AT_KEY = "_metrics_received_at"
 log = get_logger("monitoring")
@@ -30,11 +31,19 @@ def _percentile(values: list[int], percentile: float) -> int | None:
 
 
 class DailyMetrics:
-    def __init__(self, path: Path = METRICS_FILE, retention_days: int = RETENTION_DAYS):
+    def __init__(
+        self,
+        path: Path = METRICS_FILE,
+        retention_days: int = RETENTION_DAYS,
+        flush_interval_seconds: float = FLUSH_INTERVAL_SECONDS,
+    ):
         self.path = path
         self.retention_days = retention_days
+        self.flush_interval_seconds = flush_interval_seconds
         self._document: dict | None = None
         self._disabled = False
+        self._dirty = False
+        self._last_flush = time.monotonic()
 
     def _load(self) -> dict:
         if self._document is not None:
@@ -68,10 +77,15 @@ class DailyMetrics:
         day.setdefault("latency_ms", {"sample_count": 0, "p50": None, "p95": None})
         day.setdefault("latency_samples_ms", [])
         day.setdefault("queue_high_water_mark", 0)
+        day.setdefault("queue_dropped_total", 0)
         return day
 
-    def _save(self) -> None:
+    def _save(self, *, force: bool = False) -> None:
         if self._disabled:
+            return
+        self._dirty = True
+        now = time.monotonic()
+        if not force and now - self._last_flush < self.flush_interval_seconds:
             return
         document = self._load()
         dates = sorted(document["days"])
@@ -85,8 +99,14 @@ class DailyMetrics:
                 encoding="utf-8",
             )
             temporary.replace(self.path)
+            self._dirty = False
+            self._last_flush = now
         except OSError as exc:
             log.error("Cannot persist monitoring metrics: %s", exc)
+
+    def flush(self) -> None:
+        if self._dirty:
+            self._save(force=True)
 
     def increment(self, field: str, amount: int = 1) -> None:
         if self._disabled:

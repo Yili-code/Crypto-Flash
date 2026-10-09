@@ -9,6 +9,7 @@ from html import escape, unescape
 from common import CONTEXT_MAX_AGE_SEC, TIER_LEVELS, load_recent_news
 from daily_digest import DigestUnavailable, FAILURE_NOTICE, build_digest, previous_day
 from news_archive import load_archive
+from operational_health import render_health_html
 
 DISPLAY_TZ = timezone(timedelta(hours=8))
 MAX_RESULTS = 10
@@ -32,6 +33,7 @@ HELP_TOPICS = {
 /important — 查看 HIGH、CRITICAL 快訊摘要
 /important 10 — 最多顯示 10 則重要快訊
 /status — 查看新聞資料筆數與新鮮度
+/health — 查看各 pipeline 的持久化健康狀態
 
 /news、/search 顯示來源摘錄；/important 顯示已保存的 AI 摘要，查詢時不需重新生成。""",
     "digest": """<b>每日重點</b>
@@ -154,7 +156,7 @@ def local_command_reply(text: str, bot_username: str) -> str | None:
         if not args:
             return HELP_INDEX
         return HELP_TOPICS.get(args.casefold(), HELP_USAGE)
-    if name not in {"news", "search", "important", "status"}:
+    if name not in {"news", "search", "important", "status", "health"}:
         return None
     limit = 5
     if name in {"news", "important"} and args:
@@ -167,6 +169,8 @@ def local_command_reply(text: str, bot_username: str) -> str | None:
         return "搜尋詞請限制在 100 個字元內。"
     if name == "status" and args:
         return "用法：/status（不需要參數）。"
+    if name == "health":
+        return "用法：/health（不需要參數）。" if args else render_health_html()
     items = _recent_items()
     if name == "status":
         counts = {tier: sum(item["tier"] == tier for item in items) for tier in TIER_LEVELS}

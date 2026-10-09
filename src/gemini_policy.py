@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
-from common import BASE_DIR
+from common import STATE_DIR
 
 TAIPEI = timezone(timedelta(hours=8))
 DEFAULT_LIMITS = {"youtube": 120, "live": 600, "digest": 10}
@@ -23,7 +23,7 @@ class PolicyStateError(RuntimeError):
 def state_path(scope: str) -> Path:
     if scope not in DEFAULT_LIMITS:
         raise PolicyStateError("Unknown Gemini usage scope")
-    return Path(os.getenv(f"GEMINI_{scope.upper()}_USAGE_FILE") or BASE_DIR / "data" / f"gemini_{scope}_usage.json")
+    return Path(os.getenv(f"GEMINI_{scope.upper()}_USAGE_FILE") or STATE_DIR / f"gemini_{scope}_usage.json")
 
 
 def daily_limit(scope: str) -> int:
@@ -134,11 +134,12 @@ def classify(status: int, data: dict, headers: dict) -> tuple[str, float]:
             daily |= "perday" in json.dumps(detail).lower() or "per_day" in json.dumps(detail).lower()
     if not math.isfinite(delay):
         delay = 0.0
+    authentication_reasons = {"API_KEY_INVALID", "API_KEY_EXPIRED", "API_KEY_SERVICE_BLOCKED"}
     if status == 429:
         return ("daily_quota" if daily else "rate_limit"), max(delay, 86400 if daily else 0)
-    if status in (401, 403) or reasons & {"API_KEY_INVALID", "API_KEY_EXPIRED", "API_KEY_SERVICE_BLOCKED"}:
+    if status == 401 or reasons & authentication_reasons:
         return "authentication", 0
-    if status in (402, 404) or error.get("status") == "FAILED_PRECONDITION":
+    if status in (402, 403, 404) or error.get("status") in {"FAILED_PRECONDITION", "PERMISSION_DENIED"}:
         return "model_configuration", 0
     if status in (408, 504):
         return "timeout", delay

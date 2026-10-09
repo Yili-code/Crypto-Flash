@@ -24,6 +24,11 @@ GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "")
 GITHUB_WORKFLOW_FILE = os.getenv("GITHUB_WORKFLOW_FILE", "telegram_assistant.yml")
 
 
+def safe_error(exc: Exception) -> str:
+    message = str(exc)
+    return message.replace(TELEGRAM_BOT_TOKEN_01, "[REDACTED]") if TELEGRAM_BOT_TOKEN_01 else message
+
+
 async def check_webhook(session: aiohttp.ClientSession) -> None:
     print("=" * 64)
     print("[1] Webhook Status")
@@ -31,7 +36,7 @@ async def check_webhook(session: aiohttp.ClientSession) -> None:
         async with session.get(f"{TELEGRAM_API}/getWebhookInfo", timeout=aiohttp.ClientTimeout(total=10)) as resp:
             data = await resp.json()
     except Exception as exc:
-        print(f"⚠️  Query failed: {exc}")
+        print(f"⚠️  Query failed: {safe_error(exc)}")
         return
 
     result = data.get("result", {}) if isinstance(data, dict) else {}
@@ -40,7 +45,7 @@ async def check_webhook(session: aiohttp.ClientSession) -> None:
         print(f"⚠️  Webhook configured: {url}")
         print("    With webhook enabled, getUpdates will conflict.")
         print("    To use long-polling, call deleteWebhook first:")
-        print(f"    {TELEGRAM_API}/deleteWebhook")
+        print("    Use Telegram's deleteWebhook method from a secret-safe client; never paste the bot token into logs.")
     else:
         print("✅ No webhook configured. Long-polling should work normally.")
 
@@ -62,7 +67,7 @@ async def check_polling_conflict(session: aiohttp.ClientSession) -> None:
         ) as resp:
             body = await resp.json()
     except Exception as exc:
-        print(f"⚠️  Request failed: {exc}")
+        print(f"⚠️  Request failed: {safe_error(exc)}")
         return
 
     if resp.status == 409:
@@ -101,7 +106,7 @@ async def check_github_actions(session: aiohttp.ClientSession) -> None:
                 return
             data = await resp.json()
     except Exception as exc:
-        print(f"⚠️  Request error: {exc}")
+        print(f"⚠️  Request error: {safe_error(exc)}")
         return
 
     runs = data.get("workflow_runs", [])
