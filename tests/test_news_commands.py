@@ -91,6 +91,33 @@ def test_status_reports_snapshot_not_connection_health(news):
     assert "不代表" in reply and "UTC+8" in reply
 
 
+def test_help_uses_two_level_command_discovery():
+    index = nc.local_command_reply("/help", "bot")
+    assert "/help news" in index and "/help digest" in index
+    assert "/help track" in index and "/help ask" in index
+    assert "/news 10" not in index and "/timeline BTC" not in index
+    assert nc.local_command_reply("/start", "bot") == index
+
+    news_help = nc.local_command_reply("/help@bot NEWS", "bot")
+    assert "<b>新聞查詢</b>" in news_help
+    assert "/news 10" in news_help and "/status" in news_help
+
+    digest_help = nc.local_command_reply("/help digest", "bot")
+    assert "/digest today" in digest_help and "/digest 2026-09-09" in digest_help
+
+    track_help = nc.local_command_reply("/help track", "bot")
+    assert "/track BTC" in track_help and "/updates BTC" in track_help and "/untrack BTC" in track_help
+
+    ask_help = nc.local_command_reply("/help ask", "bot")
+    assert "/ask 問題" in ask_help and "不會即時搜尋網路" in ask_help
+
+
+def test_help_rejects_unknown_topic_with_available_categories():
+    reply = nc.local_command_reply("/help unknown", "bot")
+    assert reply == nc.HELP_USAGE
+    assert all(topic in reply for topic in ("news", "digest", "track", "ask"))
+
+
 @pytest.mark.parametrize("pattern", ["<>&", "😀"])
 def test_html_is_escaped_and_message_size_is_bounded(news, pattern):
     news[:] = [{"ts": time.time() - i, "title": pattern * 100, "content": pattern * 200, "tier": "HIGH"}

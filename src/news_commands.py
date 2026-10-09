@@ -13,7 +13,18 @@ from news_archive import load_archive
 DISPLAY_TZ = timezone(timedelta(hours=8))
 MAX_RESULTS = 10
 MESSAGE_BUDGET = 3500
-HELP_TEXT = """<b>Crypto Flash 指令</b>
+HELP_INDEX = """<b>Crypto Flash 指令</b>
+選擇分類查看完整語法：
+
+/help news — 新聞查詢
+/help digest — 每日重點
+/help track — 事件追蹤
+/help ask — AI 分析
+
+查詢使用已保存的新聞資料，時間為 UTC+8。"""
+
+HELP_TOPICS = {
+    "news": """<b>新聞查詢</b>
 /news — 最近 5 則快訊
 /news 10 — 最近 10 則（最多 10 則）
 /search BTC — 搜尋標題與內文，不分大小寫
@@ -21,20 +32,27 @@ HELP_TEXT = """<b>Crypto Flash 指令</b>
 /important — 查看 HIGH、CRITICAL 快訊摘要
 /important 10 — 最多顯示 10 則重要快訊
 /status — 查看新聞資料筆數與新鮮度
+
+/news、/search 顯示來源摘錄；/important 顯示已保存的 AI 摘要，查詢時不需重新生成。""",
+    "digest": """<b>每日重點</b>
 /digest — 昨日 AI 重點，30 秒掌握大事
 /digest today — 今日截至目前的重點
-/digest 2026-09-09 — 指定日期（限保存資料）
-/track BTC — 追蹤關鍵字的新進展
+/digest 2026-09-09 — 指定日期（限保存資料）""",
+    "track": """<b>事件追蹤</b>
+/track BTC — 從現在開始追蹤關鍵字的新進展
 /tracks — 追蹤清單與未讀筆數
 /timeline BTC — 最近 72 小時的事件時間線
-/updates — 只讀追蹤主題的新增進展
+/updates — 只讀所有追蹤主題的新增進展
 /updates BTC — 只讀指定主題的新增進展
-/untrack BTC — 停止追蹤
+/untrack BTC — 停止追蹤""",
+    "ask": """<b>AI 分析</b>
 /ask 問題 — 交給 Gemini 分析
-/help — 顯示指令說明
 
-查詢使用已保存的近期新聞，時間為 UTC+8。
-/news、/search 顯示來源摘錄；/important 顯示已保存的 AI 摘要，查詢時不需重新生成。"""
+例如：/ask 最近有哪些重要消息？
+分析只使用已保存的新聞背景，不會即時搜尋網路。""",
+}
+
+HELP_USAGE = "未知分類。請使用 /help news、/help digest、/help track 或 /help ask。"
 
 
 def parse_command(text: str, bot_username: str) -> tuple[str, str] | None:
@@ -130,8 +148,12 @@ def local_command_reply(text: str, bot_username: str) -> str | None:
     if command is None:
         return None
     name, args = command
-    if name in {"start", "help"}:
-        return HELP_TEXT
+    if name == "start":
+        return HELP_INDEX
+    if name == "help":
+        if not args:
+            return HELP_INDEX
+        return HELP_TOPICS.get(args.casefold(), HELP_USAGE)
     if name not in {"news", "search", "important", "status"}:
         return None
     limit = 5

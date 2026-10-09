@@ -208,9 +208,13 @@ python src/flash_service.py
 | `/search BTC` | 不分大小寫搜尋近期新聞的標題與內文；多字搜尋採完整詞組比對 |
 | `/important`、`/important 10` | 只查看 HIGH、CRITICAL 快訊 |
 | `/status` | 可查詢筆數、分級分布、最新紀錄時間 |
-| `/help`、`/start` | 顯示指令說明 |
+| `/help`、`/start` | 顯示指令分類索引 |
+| `/help news` | 展開新聞查詢的完整語法 |
+| `/help digest` | 展開每日重點的完整語法 |
+| `/help track` | 展開事件追蹤的完整語法 |
+| `/help ask` | 展開 AI 分析的完整語法 |
 
-這些指令不需要 Gemini API key，群組中也可使用 `/digest@你的機器人名稱`。`/news`、`/search`、`/important` 顯示來源摘錄；`/digest` 沿用監控時已產生的 AI 摘要，依重要性彙整，不增加模型呼叫，不把未分級原文當成摘要推送。Telegram 問答服務必須正在執行，才能回覆指令。問答 workflow 與 Jin10 monitor 一樣，每 6 小時啟動、服務執行 350 分鐘後停止，留時間在 360 分鐘 job 上限前保存追蹤進度，接近全天運行。兩次執行間仍有空窗，GitHub 排程延遲也可能延長空窗，並非無縫 24/7。每日推送是獨立 workflow，不受問答服務是否啟動影響。
+`/help` 採兩層式 command discovery：第一層只顯示分類，第二層以 `/help <分類>` 展開該類完整語法。除 `/ask` 外，這些指令不需要 Gemini API key；群組中也可使用 `/digest@你的機器人名稱`。`/news`、`/search`、`/important` 顯示來源摘錄；`/digest` 沿用監控時已產生的 AI 摘要，依重要性彙整，不增加模型呼叫，不把未分級原文當成摘要推送。Telegram 問答服務必須正在執行，才能回覆指令。問答 workflow 與 Jin10 monitor 一樣，每 6 小時啟動、服務執行 350 分鐘後停止，留時間在 360 分鐘 job 上限前保存追蹤進度，接近全天運行。兩次執行間仍有空窗，GitHub 排程延遲也可能延長空窗，並非無縫 24/7。每日推送是獨立 workflow，不受問答服務是否啟動影響。
 
 **每日推送：** `daily_digest.yml` 設定於台灣時間 **08:15** 推送前一日 00:00–24:00 的重點，使用 `TELEGRAM_BOT_TOKEN_01` 與 `TELEGRAM_CHAT_ID`。日期按新聞收錄時間、UTC+8 計算。第一次啟用必須先讓監控累積資料；缺少資料會明確說明，並不代表當天沒有事件。日報再經 AI 合併同題新聞，以「一句主軸＋最多三件大事＋後續焦點」呈現，正文最多 250 字；AI 整理失敗會明確通知，不回退成長篇摘錄。設定與限制見 [每日重點說明](daily-digest.md)。
 

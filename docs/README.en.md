@@ -194,9 +194,13 @@ Q&A uses a mobile-friendly layout with four sections: conclusion, confirmed fact
 | `/search BTC` | Case-insensitive title/body search; multiple words match as a phrase |
 | `/important`, `/important 10` | HIGH and CRITICAL news only |
 | `/status` | Record counts, tier distribution, and latest record timestamp |
-| `/help`, `/start` | Command guide |
+| `/help`, `/start` | Command category index |
+| `/help news` | Full news-query syntax |
+| `/help digest` | Full daily-roundup syntax |
+| `/help track` | Full event-tracking syntax |
+| `/help ask` | Full AI-analysis syntax |
 
-These commands work without a Gemini key and accept `/command@bot_username` in groups. The assistant must be running to answer them. News queries display source excerpts; daily roundups reuse previously generated AI summaries, with no new model calls or cross-event inference. Ungraded raw news is never substituted for a daily summary.
+`/help` uses two-level command discovery: the first level lists categories only, and `/help <category>` expands the complete syntax for that category. Except for `/ask`, these commands work without a Gemini key and accept `/command@bot_username` in groups. The assistant must be running to answer them. News queries display source excerpts; daily roundups reuse previously generated AI summaries, with no new model calls or cross-event inference. Ungraded raw news is never substituted for a daily summary.
 
 Like the Jin10 monitor, the assistant workflow starts every six hours and runs the service for 350 minutes, leaving time to persist tracking progress before the 360-minute job deadline. This provides near-continuous availability, with a gap between runs that scheduling delays can extend; it is not seamless 24/7 operation. Daily delivery is an independent workflow and does not require the assistant to be running.
 
