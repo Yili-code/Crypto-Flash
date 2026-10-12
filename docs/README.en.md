@@ -130,7 +130,7 @@ Example channel configuration:
 ]
 ```
 
-`name` must be unique, and `channel_id` is the YouTube channel ID. `system_prompt` is optional and sets a channel's focus, not a fixed template. Each video gets a conclusion, main arguments, and practical implications, with structure and length adapted to its content. A separate Gemini Google Search request checks key claims and adds API-linked sources; missing sources or search failures are explicitly disclosed while retaining the video summary. Search adds API usage, latency, and any Google plan-dependent search charges.
+`name` must be unique, and `channel_id` is the YouTube channel ID. `system_prompt` is optional and sets a channel's focus, not a fixed template. Each video gets bold section headings for its conclusion, main arguments, and practical implications, targeting roughly 450–650 Chinese characters. A separate 250–400-character Gemini Google Search response checks 2–4 key claims; its section and source headings are also bold. These are generation targets rather than destructive truncation limits. Missing sources or search failures are explicitly disclosed while retaining the video summary. Search adds API usage, latency, and any Google plan-dependent search charges.
 
 `data/yt_progress.json` separately records notification, summary completion, research completion, generated content, and delivery receipts. A failed summary sends nothing, remains unread, and stays pending until parsing succeeds. Failed research preserves and delivers the successfully parsed summary; later runs send only the research supplement. Pending videos resume even after leaving RSS or when feed fetching fails. Oldest-attempted pending work runs first within the per-channel limit. Completed steps are reused.
 

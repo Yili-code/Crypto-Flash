@@ -54,6 +54,16 @@ def test_summary_failure_stays_silent_then_sends_once_after_recovery(flow):
     assert summary.await_count == 3
 
 
+def test_delivered_sections_use_telegram_bold_titles(flow):
+    _, summary, research, send = flow
+    summary.return_value = "一句話結論\n結論\n主要論證\n論證\n實際用途\n用途"
+    research.return_value = "查證結果\n支持。 [1]\n理解修正\n保留限制。\n\n查證來源\n[1] Source"
+    run()
+    message = send.call_args.args[2]
+    for title in ("一句話結論", "主要論證", "實際用途", "查證結果", "理解修正", "查證來源", "Source"):
+        assert f"<b>{title}</b>" in message
+
+
 def test_research_recovery_reuses_summary_and_only_sends_supplement(flow):
     _, summary, research, send = flow
     research.return_value = None
