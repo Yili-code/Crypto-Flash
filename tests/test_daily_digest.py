@@ -130,6 +130,42 @@ def test_failed_or_invalid_model_output_is_not_a_digest(daily_items, model, raw)
         asyncio.run(dd.build_digest(None, daily_items[0]))
 
 
+def test_invalid_model_output_is_repaired_once(daily_items, model):
+    invalid = json.dumps({
+        "overview": "政策仍有變數",
+        "points": [{"title": "Fed 發言", "detail": "官員稱通膨未降。", "source_ids": [1]}],
+        "watch": "過長" * 23,
+    }, ensure_ascii=False)
+    valid = json.dumps({
+        "overview": "政策仍有變數",
+        "points": [{"title": "Fed 發言", "detail": "官員稱通膨未降。", "source_ids": [1]}],
+        "watch": "觀察通膨",
+    }, ensure_ascii=False)
+    model.side_effect = [invalid, valid]
+
+    reply = asyncio.run(dd.build_digest(None, daily_items[0]))
+
+    assert "觀察通膨" in reply
+    assert model.await_count == 2
+    repair_instruction = model.await_args_list[1].kwargs["system_instruction"]
+    assert "watch exceeds 45 characters" in repair_instruction
+    assert "只修正格式與長度" in repair_instruction
+
+
+def test_repeated_invalid_model_output_still_fails_closed(daily_items, model):
+    invalid = json.dumps({
+        "overview": "政策仍有變數",
+        "points": [{"title": "Fed 發言", "detail": "官員稱通膨未降。", "source_ids": [1]}],
+        "watch": "過長" * 23,
+    }, ensure_ascii=False)
+    model.side_effect = [invalid, invalid]
+
+    with pytest.raises(dd.DigestUnavailable, match="watch exceeds 45 characters"):
+        asyncio.run(dd.build_digest(None, daily_items[0]))
+
+    assert model.await_count == 2
+
+
 def test_render_escapes_html_and_preserves_complete_text():
     raw = json.dumps({"overview": "<Fed>&", "points": [
         {"title": "<標題>", "detail": "完整句子 & 😀", "source_ids": [1]}], "watch": ""})
