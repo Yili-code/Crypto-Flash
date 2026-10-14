@@ -34,6 +34,8 @@ data/
 !data/monitoring_daily.json
 !data/classification_backlog.json
 !data/telegram_update_state.json
+!data/delivered_flashes.json
+!data/event_briefing_state.json
 *.csv
 *.sqlite3
 

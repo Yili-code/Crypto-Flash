@@ -26,6 +26,7 @@ from common import (
 from gemini import GEMINI_API_KEY, call_gemini, test_gemini_connection
 from monitoring_metrics import RECEIVED_AT_KEY, metrics
 from news_archive import archive_news, remove_archived_news
+from delivered_flashes import record_delivery
 from tg import TELEGRAM_BOT_TOKEN_01, TELEGRAM_CHAT_ID, send_telegram_message
 
 log = get_logger("jin10")
@@ -477,6 +478,7 @@ async def handle_item(session: aiohttp.ClientSession, item: dict, *, retrying: b
     msg = format_message(summary, tier=tier, source=source, url=url)
     ok = await send_telegram_message(session, TELEGRAM_CHAT_ID, msg, TELEGRAM_BOT_TOKEN_01)
     if ok:
+        record_delivery(summary, source=source, url=url)
         metrics.record_push(tier, item.get(RECEIVED_AT_KEY))
     else:
         metrics.increment("telegram_delivery_failures")

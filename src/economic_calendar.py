@@ -12,7 +12,7 @@ from common import STATE_DIR, get_logger
 from tg import TELEGRAM_CHAT_ID, send_telegram_message
 
 TAIPEI = timezone(timedelta(hours=8))
-WINDOW_DAYS = 3
+WINDOW_DAYS = 2
 CALENDAR_RETRY_DELAYS = (30, 120)
 EVENT_LABELS = {
     "CPI m/m": "CPI",
@@ -60,7 +60,7 @@ def select_events(payload: object, day: date) -> list[tuple[datetime, str]]:
     end = (datetime.combine(day + timedelta(days=WINDOW_DAYS), datetime.min.time(), TAIPEI)
            - timedelta(microseconds=1)).astimezone(source_tz).date()
     if not (week_start <= start <= end < week_start + timedelta(days=7)):
-        raise ValueError("Calendar feed does not cover the entire three-day Taiwan window")
+        raise ValueError("Calendar feed does not cover the entire two-day Taiwan window")
     return sorted(events)
 
 
@@ -71,7 +71,7 @@ def render_messages(events: list[tuple[datetime, str]], day: date) -> list[str]:
     header += f"{day:%Y/%m/%d}–{end_label} · 台灣時間\n"
     footer = ''
     if not events:
-        return [header + "\n這三天沒有 CPI、非農或 FOMC。"]
+        return [header + "\n這兩天沒有 CPI、非農或 FOMC。"]
     messages = []
     body = header
     for when, title in events:

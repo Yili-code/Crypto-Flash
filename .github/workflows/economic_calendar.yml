@@ -25,7 +25,7 @@ jobs:
           cache: 'pip'
       - name: Install dependencies
         run: pip install -r requirements.lock
-      - name: Send three-day economic calendar
+      - name: Send two-day economic calendar
         env:
           TELEGRAM_BOT_TOKEN_01: ${{ secrets.TELEGRAM_BOT_TOKEN_01 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

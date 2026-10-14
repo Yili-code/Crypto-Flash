@@ -7,10 +7,14 @@ import monitoring_metrics
 import telegram_assistant
 import telegram_update_state
 import classification_backlog
+import delivered_flashes
+import event_briefing
 
 
 @pytest.fixture(autouse=True)
 def _isolated_youtube_progress(tmp_path, monkeypatch):
+    monkeypatch.setattr(delivered_flashes, "STATE_FILE", tmp_path / "delivered_flashes.json")
+    monkeypatch.setattr(event_briefing, "STATE_FILE", tmp_path / "event_briefing_state.json")
     monkeypatch.setattr(yt_monitor, "PROGRESS_FILE", tmp_path / "yt_progress.json")
     monkeypatch.setattr(yt_monitor, "SCHEDULE_FILE", tmp_path / "yt_schedule.json")
     monkeypatch.setenv("GEMINI_YOUTUBE_USAGE_FILE", str(tmp_path / "youtube_usage.json"))

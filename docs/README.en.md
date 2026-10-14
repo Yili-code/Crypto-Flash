@@ -266,7 +266,7 @@ The public monitoring and verification path uses five workflows:
 | `yt_monitor.yml` | Runs `src/yt_monitor.py` to monitor YouTube videos and push summaries |
 | `ci.yml` | Runs `ruff` and `pytest` on push / PR; uses no secrets |
 | `daily_digest.yml` | Sends yesterday's roundup at 08:15 UTC+8 and persists the delivery date |
-| `economic_calendar.yml` | Sends a three-day economic calendar at 08:00 UTC+8 and persists delivery state |
+| `economic_calendar.yml` | Sends a two-day economic calendar at 08:00 UTC+8 and persists delivery state |
 
 Set these in GitHub `Settings → Secrets and variables → Actions`:
 
@@ -395,3 +395,16 @@ AI-generated summaries and analysis are for reference only and do not constitute
 <b>If this project saved you time filtering market noise, consider giving it a star.</b>
 
 </div>
+
+The Event Reminder covers today and tomorrow in Taiwan time, from today at 00:00 through the day after tomorrow at 00:00 (exclusive). It includes US CPI, non-farm payrolls, and FOMC decisions, projections, and press conferences.
+
+
+### Pre-event market briefing
+
+The live `flash_service.py` checks CPI, non-farm payrolls, and FOMC events every 60 seconds and refreshes the two-day calendar every 15 minutes. A briefing becomes due one hour before release. Simultaneous events share one briefing; a late start catches up only before the release. Actions delays, runner gaps, model latency, and Telegram latency prevent an exact delivery-time guarantee.
+
+The briefing includes all recorded successful flash deliveries from Taiwan midnight through generation time, using delivery dates rather than the ingestion dates used by `/digest`. It targets five minutes of reading (1,200–1,800 Chinese characters), delivered in four sections: today's news, its relationship to the indicator, conditional release scenarios, and what to watch afterward. It distinguishes reported facts, general mechanisms, and hypothetical outcomes without inventing consensus estimates, prior values, release results, or guaranteed market directions. Retried segments retain the original analysis and cutoff time.
+
+Archived but undelivered news is excluded. Historical archives cannot establish delivery before this feature was enabled. Initial rollout, monitoring gaps, and unsaved records may leave gaps. No-news notices skip AI. Inputs over 300,000 characters, invalid AI output, invalid source IDs, and invalid lengths produce an explicit failure notice and retry every five minutes before release. There is no raw-news fallback. Requests use the existing live Gemini budget, including failed requests.
+
+Only `flash_monitor.yml` writes `data/delivered_flashes.json` (72-hour delivery journal) and `data/event_briefing_state.json` (cached analysis and per-segment progress). Progress advances after Telegram confirms success. Delivery and local/GitHub persistence are not atomic: restarts can still duplicate messages if delivery succeeded before progress was persisted.

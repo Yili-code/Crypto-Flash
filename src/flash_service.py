@@ -4,12 +4,16 @@ import asyncio
 
 import jin10_monitor
 import telegram_assistant
+import event_briefing
+import delivered_flashes
 
 
 async def main() -> None:
+    delivered_flashes.initialize()
     tasks = [
         asyncio.create_task(jin10_monitor.main()),
         asyncio.create_task(telegram_assistant.main()),
+        asyncio.create_task(event_briefing.main()),
     ]
     try:
         done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)

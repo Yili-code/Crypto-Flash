@@ -27,25 +27,25 @@ def test_taiwan_day_filter_sort_deduplicate_and_utc_rollover():
 def test_winter_offset_and_midnight_boundaries():
     rows = [entry("2026-01-13T10:59:59-05:00", "CPI y/y"),
             entry("2026-01-13T11:00:00-05:00", "CPI m/m"),
-            entry("2026-01-16T10:59:59-05:00", "Non-Farm Employment Change"),
-            entry("2026-01-16T11:00:00-05:00", "FOMC Statement")]
+            entry("2026-01-15T10:59:59-05:00", "Non-Farm Employment Change"),
+            entry("2026-01-15T11:00:00-05:00", "FOMC Statement")]
     assert [name for _, name in ec.select_events(rows, date(2026, 1, 14))] == ["CPI", "非農就業"]
 
 
 def test_no_events_explains_dates_scope_and_meaning():
     text = ec.render_messages(ec.select_events([entry(title="Retail Sales m/m")], date(2026, 9, 16)),
                               date(2026, 9, 16))[0]
-    assert "2026/09/16–09/18" in text
-    assert "這三天沒有 CPI、非農或 FOMC" in text
+    assert "2026/09/16–09/17" in text
+    assert "這兩天沒有 CPI、非農或 FOMC" in text
     assert "https://www.forexfactory.com/calendar" in text
 
 
-def test_three_day_summer_boundaries():
+def test_two_day_summer_boundaries():
     rows = [entry("2026-09-15T11:59:59-04:00", "CPI y/y"),
             entry("2026-09-15T12:00:00-04:00", "CPI m/m"),
             entry("2026-09-16T12:00:00-04:00", "Non-Farm Employment Change"),
-            entry("2026-09-18T11:59:59-04:00", "FOMC Statement"),
-            entry("2026-09-18T12:00:00-04:00", "FOMC Press Conference")]
+            entry("2026-09-17T11:59:59-04:00", "FOMC Statement"),
+            entry("2026-09-17T12:00:00-04:00", "FOMC Press Conference")]
     assert [name for _, name in ec.select_events(rows, date(2026, 9, 16))] == [
         "CPI", "非農就業", "FOMC 利率決議"]
 
@@ -58,7 +58,7 @@ def test_bad_feed_never_means_no_events(rows):
 
 
 @pytest.mark.parametrize("day", [date(2026, 9, 23), date(2026, 9, 13), date(2026, 9, 20),
-                                 date(2026, 9, 18), date(2026, 9, 19)])
+                                 date(2026, 9, 19)])
 def test_stale_or_partial_week_rejected(day):
     with pytest.raises(ValueError, match="cover"):
         ec.select_events([entry()], day)
@@ -91,7 +91,7 @@ def test_success_saved_and_rerun_skipped(delivery):
     assert json.loads(ec.STATE_FILE.read_text())["last_sent_date"] == datetime.now(ec.TAIPEI).date().isoformat()
     asyncio.run(ec.main())
     delivery.assert_awaited_once()
-    assert "這三天沒有 CPI、非農或 FOMC" in delivery.call_args.args[2]
+    assert "這兩天沒有 CPI、非農或 FOMC" in delivery.call_args.args[2]
 
 
 def test_send_failure_does_not_save(delivery):
@@ -130,7 +130,7 @@ def test_dry_run_does_not_send_or_save(delivery, capsys):
     asyncio.run(ec.main(dry_run=True))
     delivery.assert_not_awaited()
     assert not ec.STATE_FILE.exists()
-    assert "這三天沒有 CPI、非農或 FOMC" in capsys.readouterr().out
+    assert "這兩天沒有 CPI、非農或 FOMC" in capsys.readouterr().out
 
 
 def test_corrupt_state_stops_before_send(delivery):
@@ -147,3 +147,11 @@ def test_only_requested_events_and_same_release_deduplicated():
     events = ec.select_events(rows, date(2026, 9, 16))
     assert {title for _, title in events} == {"CPI", "非農就業", "FOMC 利率決議", "FOMC 記者會", "FOMC 經濟預測"}
     assert len(events) == 5
+
+
+def test_two_day_window_fits_before_source_week_end():
+    assert ec.select_events([entry()], date(2026, 9, 18)) == []
+
+
+def test_unavailable_notice_uses_two_day_range_across_year_end():
+    assert "2026/12/31–2027/01/01" in ec.render_unavailable_notice(date(2026, 12, 31))
