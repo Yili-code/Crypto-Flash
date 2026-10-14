@@ -410,3 +410,5 @@ Archived but undelivered news is excluded. Historical archives cannot establish 
 Only `flash_monitor.yml` writes `data/delivered_flashes.json` (72-hour delivery journal) and `data/event_briefing_state.json` (cached analysis and per-segment progress). Progress advances after Telegram confirms success. Delivery and local/GitHub persistence are not atomic: restarts can still duplicate messages if delivery succeeded before progress was persisted.
 
 For an explicit calendar delivery check, set force=true on economic_calendar workflow_dispatch (or use --force). This resends today's two-day reminder; scheduled runs retain date-based deduplication.
+
+Set briefing_preview=true on a manual flash_monitor run to request one five-minute preview. The request lasts two days and waits for a newly confirmed flash delivery, then uses the next real unreleased event in the two-day calendar. Messages are labeled as a manual preview, separate from scheduled reminders. The live workflow persists the request and segment progress across restarts and stops after successful delivery. No event is fabricated.

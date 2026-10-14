@@ -192,3 +192,45 @@ def test_corrupt_progress_stops_before_send(now, monkeypatch):
     with pytest.raises(ValueError):
         asyncio.run(eb.tick(None, [(now + timedelta(hours=1), "CPI")], now=now))
     sender.assert_not_awaited()
+
+
+def test_preview_waits_for_new_delivery_then_resumes_after_restart(now, monkeypatch):
+    events = [(now + timedelta(hours=3), "CPI")]
+    build = AsyncMock(return_value=["first", "second"])
+    sender = AsyncMock(side_effect=[True, False])
+    monkeypatch.setattr(eb, "build_messages", build)
+    monkeypatch.setattr(eb, "send_telegram_message", sender)
+    df.save_json(df.STATE_FILE, {"since": now.timestamp() - 10, "items": [
+        {"sent_at": now.timestamp() - 1, "summary": "before request"}]})
+    asyncio.run(eb.tick(None, events, now=now, preview_id="test"))
+    build.assert_not_awaited()
+    sender.assert_not_awaited()
+    df.record_delivery("new", source="test", url="")
+    # A later run has no environment input; the saved request still triggers.
+    asyncio.run(eb.tick(None, events, now=now + timedelta(seconds=1)))
+    assert eb.load_state()["preview:test"]["next"] == 1
+    assert "手動預覽" in sender.call_args_list[0].args[2]
+    sender.side_effect = None
+    sender.return_value = True
+    sender.reset_mock()
+    asyncio.run(eb.tick(None, events, now=now + timedelta(seconds=2)))
+    sender.assert_awaited_once()
+    assert sender.call_args.args[2].endswith("second")
+    assert eb.load_state()["preview:test"]["done"]
+    build.assert_awaited_once()
+    sender.reset_mock()
+    asyncio.run(eb.tick(None, events, now=now + timedelta(seconds=3), preview_id="test"))
+    sender.assert_not_awaited()
+    assert events[0][0].isoformat() not in eb.load_state()
+
+
+def test_preview_requires_real_future_event_and_expires(now, monkeypatch):
+    build = AsyncMock()
+    monkeypatch.setattr(eb, "build_messages", build)
+    asyncio.run(eb.tick(None, [], now=now, preview_id="test"))
+    df.record_delivery("new", source="test", url="")
+    asyncio.run(eb.tick(None, [(now, "past CPI")], now=now))
+    build.assert_not_awaited()
+    later = now + timedelta(days=3)
+    asyncio.run(eb.tick(None, [(later + timedelta(hours=3), "CPI")], now=later))
+    build.assert_not_awaited()

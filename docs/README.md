@@ -418,3 +418,5 @@ AI 生成的摘要與分析僅供參考，不構成任何投資建議。市場�
 `flash_monitor.yml` 獨占寫入 `data/delivered_flashes.json`（成功快訊紀錄，保留 72 小時）與 `data/event_briefing_state.json`（分析快取及逐段送達進度）。Telegram 成功後才推進分段進度；發送成功但狀態未落盤或尚未 commit 就重啟時仍可能重複，不保證 exactly-once。
 
 手動驗證日曆推播可在 economic_calendar workflow_dispatch 設定 force=true（或使用 --force），明確重送今天的兩天提醒；一般排程仍依送達日期去重。
+
+手動執行 flash_monitor 時可設定 briefing_preview=true：建立一筆有效兩天的一次性請求，等請求後有新快訊成功推播，再對兩天日曆內最近的未公布事件發送五分鐘分析，標示「手動預覽｜非定時提醒」。請求及分段進度由原 live workflow 保存，重啟可接續，完成後不再發送；不使用虛構事件，也不取代正常事件前一小時提醒。

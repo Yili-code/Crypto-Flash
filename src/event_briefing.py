@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import time
 from datetime import datetime, timedelta
 from html import escape, unescape
@@ -102,22 +103,49 @@ async def build_messages(session, when, labels, now):
         for i, message in enumerate(messages[1:], 2)]
 
 
-async def tick(session, events, *, now=None):
+async def tick(session, events, *, now=None, preview_id=""):
     now = now or datetime.now(TAIPEI)
     state = load_state()
     state = {key: value for key, value in state.items() if value["at"] >= now.timestamp() - 72 * 3600}
+    if preview_id:
+        state.setdefault("preview:" + preview_id, {
+            "at": (now + timedelta(days=2)).timestamp(), "next": 0,
+            "preview": True, "requested_at": now.timestamp(),
+        })
+        save_json(STATE_FILE, state)
     grouped = {}
     for when, label in events:
         if when - timedelta(hours=1) <= now < when:
             grouped.setdefault(when, set()).add(label)
-    for when, labels in sorted(grouped.items()):
-        key = when.isoformat()
+    work = [(when.isoformat(), when, labels, False) for when, labels in sorted(grouped.items())]
+    for key, progress in state.items():
+        if not progress.get("preview") or progress.get("done") or progress["at"] <= now.timestamp():
+            continue
+        future = sorted({when for when, _ in events if when > now})
+        if not future:
+            continue
+        if "messages" in progress:
+            when = datetime.fromtimestamp(progress["at"], TAIPEI)
+            if when not in future:
+                continue
+        else:
+            start = max(progress["requested_at"], now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+            if not any(start <= item["sent_at"] <= now.timestamp() for item in load_deliveries()["items"]):
+                continue
+            when = future[0]
+        labels = {label for at, label in events if at == when}
+        work.append((key, when, labels, True))
+    for key, when, labels, preview in work:
         progress = state.setdefault(key, {"at": when.timestamp(), "next": 0})
         if progress.get("done") or progress.get("retry_at", 0) > now.timestamp():
             continue
         if "messages" not in progress:
             try:
                 progress["messages"] = await build_messages(session, when, sorted(labels), now)
+                progress["at"] = when.timestamp()
+                if preview:
+                    progress["messages"] = ["<b>手動預覽｜非定時提醒</b>\n" + message
+                                            for message in progress["messages"]]
             except (ValueError, TypeError, OSError) as exc:
                 log.warning("Event briefing unavailable: %s", type(exc).__name__)
                 progress["retry_at"] = now.timestamp() + 300
@@ -139,6 +167,7 @@ async def tick(session, events, *, now=None):
             save_json(STATE_FILE, state)
         if progress["next"] == len(progress["messages"]):
             progress["done"] = True
+            log.info("Event briefing delivered: %s (%s segments)", key, progress["next"])
         save_json(STATE_FILE, state)
 
 
@@ -151,7 +180,7 @@ async def main():
                 if time.time() - refreshed >= 900:
                     events = select_events(await fetch_calendar(session), now.date())
                     refreshed = time.time()
-                await tick(session, events, now=now)
+                await tick(session, events, now=now, preview_id=os.getenv("EVENT_BRIEFING_PREVIEW_ID", ""))
             except (OSError, ValueError, TypeError, aiohttp.ClientError, asyncio.TimeoutError):
                 log.exception("Event briefing check failed; will retry without assuming delivery")
             await asyncio.sleep(60)

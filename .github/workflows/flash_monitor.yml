@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 */6 * * *'
   workflow_dispatch:
+    inputs:
+      briefing_preview:
+        description: Send one five-minute preview after a new flash is successfully delivered
+        type: boolean
+        default: false
 
 concurrency:
   group: jin10-monitor
@@ -44,6 +49,7 @@ jobs:
           TELEGRAM_BOT_TOKEN_01: ${{ secrets.TELEGRAM_BOT_TOKEN_01 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_OWNER_USER_IDS: ${{ secrets.TELEGRAM_OWNER_USER_IDS }}
+          EVENT_BRIEFING_PREVIEW_ID: ${{ inputs.briefing_preview && github.run_id || '' }}
         # Stop before the job deadline so the archive persistence step can run.
         run: |
           set +e
