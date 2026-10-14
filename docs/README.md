@@ -416,3 +416,5 @@ AI 生成的摘要與分析僅供參考，不構成任何投資建議。市場�
 只納入成功推播紀錄，未送達或僅保存的新聞不納入。部署前的舊 archive 不能回推為已送達；首次啟用、監控中斷或狀態未保存時會有缺漏。無當日快訊時只通知資料不足，不呼叫 AI。全部輸入超過 300,000 字元、AI 無效、來源 ID 或篇幅不合格時明確回報失敗，公布前每五分鐘重試，不回退為原文或假分析。每次模型請求共用 `live` 每日預算，失敗也計次。
 
 `flash_monitor.yml` 獨占寫入 `data/delivered_flashes.json`（成功快訊紀錄，保留 72 小時）與 `data/event_briefing_state.json`（分析快取及逐段送達進度）。Telegram 成功後才推進分段進度；發送成功但狀態未落盤或尚未 commit 就重啟時仍可能重複，不保證 exactly-once。
+
+手動驗證日曆推播可在 economic_calendar workflow_dispatch 設定 force=true（或使用 --force），明確重送今天的兩天提醒；一般排程仍依送達日期去重。

@@ -101,6 +101,13 @@ def test_send_failure_does_not_save(delivery):
     assert not ec.STATE_FILE.exists()
 
 
+def test_explicit_force_resends_today_without_changing_default_dedup(delivery):
+    asyncio.run(ec.main())
+    asyncio.run(ec.main(force=True))
+    asyncio.run(ec.main())
+    assert delivery.await_count == 2
+
+
 def test_fetch_failure_notifies_only_after_all_retries_and_does_not_save(delivery, monkeypatch):
     fetcher = AsyncMock(side_effect=ValueError("bad feed"))
     monkeypatch.setattr(ec, "fetch_calendar", fetcher)

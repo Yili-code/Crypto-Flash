@@ -125,7 +125,7 @@ def render_unavailable_notice(day: date) -> str:
     )
 
 
-async def main(*, dry_run: bool = False) -> None:
+async def main(*, dry_run: bool = False, force: bool = False) -> None:
     day = datetime.now(TAIPEI).date()
     try:
         state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
@@ -133,7 +133,7 @@ async def main(*, dry_run: bool = False) -> None:
             raise ValueError("Invalid delivery state")
     except FileNotFoundError:
         state = {}
-    if not dry_run and state.get("last_sent_date") == day.isoformat():
+    if not dry_run and not force and state.get("last_sent_date") == day.isoformat():
         return
     async with aiohttp.ClientSession() as session:
         try:
@@ -161,4 +161,6 @@ async def main(*, dry_run: bool = False) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="Fetch and print without sending or saving state")
-    asyncio.run(main(dry_run=parser.parse_args().dry_run))
+    parser.add_argument("--force", action="store_true", help="Explicitly resend today's reminder")
+    args = parser.parse_args()
+    asyncio.run(main(dry_run=args.dry_run, force=args.force))

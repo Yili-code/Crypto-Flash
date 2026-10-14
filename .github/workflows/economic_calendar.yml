@@ -5,6 +5,11 @@ on:
     # 08:00 Asia/Taipei = 00:00 UTC. GitHub may delay scheduled jobs.
     - cron: '0 0 * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: Explicitly resend today's reminder even if already delivered
+        type: boolean
+        default: false
 
 concurrency:
   group: daily-economic-calendar
@@ -29,7 +34,13 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN_01: ${{ secrets.TELEGRAM_BOT_TOKEN_01 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python src/economic_calendar.py
+          FORCE_RESEND: ${{ inputs.force }}
+        run: |
+          if [ "$FORCE_RESEND" = "true" ]; then
+            python src/economic_calendar.py --force
+          else
+            python src/economic_calendar.py
+          fi
       - name: Persist calendar delivery state
         if: always()
         uses: ./.github/actions/persist-state
