@@ -412,3 +412,5 @@ Only `flash_monitor.yml` writes `data/delivered_flashes.json` (72-hour delivery 
 For an explicit calendar delivery check, set force=true on economic_calendar workflow_dispatch (or use --force). This resends today's two-day reminder; scheduled runs retain date-based deduplication.
 
 Set briefing_preview=true on a manual flash_monitor run to request one five-minute preview. The request lasts two days and waits for a newly confirmed flash delivery, then uses the next real unreleased event in the two-day calendar. Messages are labeled as a manual preview, separate from scheduled reminders. The live workflow persists the request and segment progress across restarts and stops after successful delivery. No event is fabricated.
+
+If a briefing draft fails format, length, or source validation, the model receives the specific validation error for at most one immediate correction. Two invalid drafts return to the five-minute backoff. Unavailable or deferred model calls do not cause immediate extra requests. Corrections count toward the live budget; diagnostics record validation reasons and character counts, not complete drafts.

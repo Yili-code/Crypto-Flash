@@ -108,6 +108,45 @@ def test_empty_journal_does_not_call_ai(now, monkeypatch):
     model.assert_not_awaited()
 
 
+def test_short_draft_is_repaired_with_exact_feedback(now, monkeypatch):
+    df.record_delivery("news", source="test", url="")
+    short = json.dumps({"sections": [
+        {"title": "section", "body": "short", "source_ids": [1]}] * 4})
+    model = AsyncMock(side_effect=[short, valid_response()])
+    monkeypatch.setattr(eb, "call_gemini", model)
+    messages = asyncio.run(eb.build_messages(None, now + timedelta(hours=1), ["CPI"], now))
+    assert len(messages) == 4
+    assert model.await_count == 2
+    correction = json.loads(model.call_args.args[1])
+    assert "body_chars=20" in correction["validation_error"]
+    assert correction["original_input"]["sources"][0]["summary"] == "news"
+
+
+def test_unavailable_model_does_not_trigger_immediate_extra_request(now, monkeypatch):
+    df.record_delivery("news", source="test", url="")
+    model = AsyncMock(return_value=None)
+    monkeypatch.setattr(eb, "call_gemini", model)
+    with pytest.raises(ValueError, match="unavailable"):
+        asyncio.run(eb.build_messages(None, now + timedelta(hours=1), ["CPI"], now))
+    model.assert_awaited_once()
+
+
+def test_invalid_repair_is_bounded_and_never_delivered(now, monkeypatch):
+    df.record_delivery("news", source="test", url="")
+    model = AsyncMock(return_value="{}")
+    sender = AsyncMock(return_value=True)
+    monkeypatch.setattr(eb, "call_gemini", model)
+    monkeypatch.setattr(eb, "send_telegram_message", sender)
+    when = now + timedelta(hours=1)
+    asyncio.run(eb.tick(None, [(when, "CPI")], now=now))
+    assert model.await_count == 2
+    sender.assert_awaited_once()
+    assert "尚未產生有效分析" in sender.call_args.args[2]
+    progress = eb.load_state()[when.isoformat()]
+    assert progress["next"] == 0 and "messages" not in progress
+    assert progress["last_error"] == "AI briefing unavailable or invalid"
+
+
 def test_missing_source_coverage_rejected(now, monkeypatch):
     df.record_delivery("first", source="test", url="")
     df.record_delivery("second", source="test", url="")
