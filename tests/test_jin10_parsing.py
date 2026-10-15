@@ -101,3 +101,22 @@ def test_is_new_evicts_so_the_cache_stays_bounded(monkeypatch):
         jm.is_new({"id": f"x{i}"})
     assert len(jm.seen_ids) <= 2000
     assert jm.is_new({"id": "x0"})  # the oldest ids were evicted, so they look new again
+
+
+def test_normalize_summary_removes_empty_sections_and_translates_terms():
+    message = "<b>市場消息</b>\n\n官員表示情緒平穩。\n\n<b>Crypto</b>\n鏈上 Liquidity。\n\n<b>總體經濟影響</b>\n\n<b>世界發展影響</b>"
+    assert jm.normalize_summary(message) == "<b>市場消息</b>\n\n官員表示情緒平穩。\n\n<b>市場影響</b>\n鏈上 流動性。"
+
+
+def test_normalize_summary_preserves_populated_sections():
+    message = "<b>消息</b>\n事實。\n\n<b>總體經濟影響</b>\n若政策實施，可能影響資金成本。"
+    assert jm.normalize_summary(message) == message
+
+
+def test_format_message_identifies_jin10_without_inventing_a_link():
+    assert jm.format_message("body", source="Jin10") == "body\n來源：Jin10"
+
+
+def test_summary_spacing_is_compact_and_prompt_accepts_source_braces():
+    assert jm.normalize_summary("  標題  \r\n\r\n\r\n  內容  ") == "標題\n\n內容"
+    assert '{data}' in jm.GEMINI_PROMPT.format(text='{data}')

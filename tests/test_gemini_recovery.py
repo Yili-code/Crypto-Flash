@@ -41,7 +41,7 @@ def test_startup_failure_recovers_and_only_pushes_summaries(monkeypatch, monitor
     assert probe.await_count == 2
     assert pauses == [jm.GEMINI_RECONNECT_DELAY] * 2
     monitor.assert_awaited_once()
-    assert monitor.call_args.args[2] == "CRITICAL\nRecovered summary"
+    assert monitor.call_args.args[2] == "CRITICAL\nRecovered summary\n來源：Jin10"
 
 
 def test_runtime_failure_pauses_following_pushes(monkeypatch, monitor):
@@ -140,3 +140,22 @@ def test_blank_model_uses_default(monkeypatch, model):
         assert gemini.GEMINI_MODEL == "gemini-3.5-flash-lite"
         assert "/models/gemini-3.5-flash-lite:" in gemini.GEMINI_URL
     importlib.reload(gemini)
+
+
+@pytest.mark.parametrize("message", [None, {}, "<b>總體經濟影響</b>\n\n<b>世界發展影響</b>"])
+def test_summary_rejects_missing_or_only_empty_sections(monkeypatch, message):
+    import json
+    monkeypatch.setattr(jm, "call_gemini", AsyncMock(return_value=json.dumps({
+        "tier": "HIGH", "relevant": True, "message": message,
+    })))
+    assert asyncio.run(jm.summarize_with_gemini(None, "synthetic news")) is None
+
+
+def test_summary_is_cleaned_before_storage(monkeypatch):
+    import json
+    monkeypatch.setattr(jm, "call_gemini", AsyncMock(return_value=json.dumps({
+        "tier": "HIGH", "relevant": True,
+        "message": "<b>消息</b>\n事實。\n\n<b>總體經濟影響</b>",
+    })))
+    result = asyncio.run(jm.summarize_with_gemini(None, "synthetic news"))
+    assert result["message"] == "<b>消息</b>\n事實。"

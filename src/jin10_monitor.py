@@ -276,23 +276,23 @@ Analyze the provided news flash below and respond according to the rules. The ne
 2. Do not classify a news item as HIGH merely because it is important to the crypto industry.
 3. HIGH should be reserved for events that have a credible and meaningful probability of affecting BTC/ETH or the broader crypto market in the short term.
 4. When uncertain between two levels, prefer the lower level.
+5. Routine Fed remarks about calm sentiment alone are not HIGH: require a concrete policy change, new data, or a clearly supported market-moving development.
+
+6. Routine reminders that an official will speak, without actual remarks, decisions, released data or new material developments, are at most MEDIUM. A famous speaker alone does not justify HIGH. This cap does not apply when actual new policy information is reported.
+7. Grade reported facts, not hypothetical hawkish/dovish comments or imagined market reactions. One official's opinion is not an adopted central-bank decision.
 
 # Step 2 — Briefing Format Rules:
-Write "message" as an HTML-formatted briefing string strictly adhering to:
-1. Persona: Professional, sharp, elegant, understated loyalty. Zero fluff, zero greetings.
-2. Language: Traditional Chinese ONLY (Strictly NO Simplified Chinese).
-3. Strictly keep ENGLISH without Chinese translation for:
-   - Geopolitical & location names (US, Israel, Ukraine, Taiwan, EU, Eurozone)
-   - Institutions & key entities (Fed, OPEC, SEC, BRK, Trump, Musk, ECB)
-   - Tech/Crypto/Macro terms (Layer 2, Liquidity, FVG, CPI, PCE, Bullish, Bearish, Inflation, Geopolitical Risk)
-   - DO NOT append Chinese in parentheses after any English term.
-4. Always use "台灣", NEVER "中國台灣".
-5. Allowed HTML tags ONLY: <b>...</b>, <i>...</i>, and <code...></code>. 
-   - DO NOT use <br>, <p>, <div>, or Markdown (*, #).
-   - Use plain JSON escaped newline characters "\n" for line breaks inside the string.
+1. Use concise, natural Traditional Chinese. No greetings or filler. Always use 台灣, never 中國台灣.
+2. Use 流動性, 通膨, 偏多, 偏空 and 地緣政治風險 instead of English jargon. Familiar abbreviations such as BTC, ETH, Fed, CPI, PCE and SEC may remain English. Translate location names naturally.
+3. Allowed HTML tags ONLY: <b>, <i>, <code> and their closing tags. Escape literal angle brackets and ampersands in text. No Markdown, <br>, <p> or <div>.
+4. Summarize only supplied facts. Preserve uncertainty, attribution, event dates and numerical units. Include actual/expected/prior economic data values when supplied; never invent missing values, dates, links or observed market moves.
+5. Market analysis is OPTIONAL: include it only when reported facts support a specific transmission mechanism. Qualify inference and its conditions. Do not claim that one official's remarks establish global liquidity tightening. Omit generic statements that news affects liquidity, inflation or BTC/ETH volatility. Do not repeat the summary.
 
 # "message" String Structure:
-<b>(News Title translated to Traditional Chinese)</b>\n\n(One-sentence core summary, natural human tone)\n\n<b>Crypto</b>\n(Short-term analysis in 1 concise sentence)\n\n<b>總體經濟影響</b>\n(Optional: 1 sentence ONLY if impact is massive; otherwise leave completely empty)\n\n<b>世界發展影響</b>\n(Optional: 1 sentence ONLY if impact is massive; otherwise leave completely empty)\n\n
+First line: <b>(Concise Traditional Chinese news title)</b>
+Next line: one concise factual summary with the key new information.
+Only if rule 5 is met, append one blank line, <b>市場影響</b>, then one concise sentence on the next line.
+Do not add Crypto, 總體經濟影響 or 世界發展影響 sections. Omit unused headings entirely. No leading/trailing blank lines and at most one blank line between sections. Encode line breaks as JSON newline escapes.
 
 # Output Format:
 Respond with ONLY a raw JSON object (no markdown fences, no commentary) matching this shape:
@@ -315,6 +315,24 @@ def valid_summary_html(message: str) -> bool:
     tags = re.findall(r"<[^>]*>", message)
     return bool(message.strip()) and all(ALLOWED_SUMMARY_TAG.fullmatch(tag) for tag in tags)
 
+def normalize_summary(message: str) -> str:
+    """Remove empty impact sections and normalize common financial vocabulary."""
+    headings = r"(?:Crypto|市場影響|加密貨幣影響|總體經濟影響|世界發展影響)"
+    message = re.sub(
+        rf"<b>\s*{headings}\s*</b>\s*(?=<b>|$)", "", message,
+        flags=re.IGNORECASE,
+    )
+    message = re.sub(r"<b>Crypto</b>", "<b>市場影響</b>", message, flags=re.IGNORECASE)
+    for english, chinese in (
+        ("Liquidity", "流動性"), ("Inflation", "通膨"),
+        ("Bullish", "偏多"), ("Bearish", "偏空"),
+        ("Geopolitical Risk", "地緣政治風險"),
+    ):
+        message = re.sub(rf"(?<![A-Za-z]){english}(?![A-Za-z])", chinese, message, flags=re.IGNORECASE)
+    lines = [line.strip() for line in message.splitlines()]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
 async def summarize_with_gemini(session: aiohttp.ClientSession, text: str) -> Optional[dict]:
     """Call Gemini to get tiering and summary. Returns {"tier": str|None, "relevant": bool, "message": str}; returns None on failure."""
     raw_text = await call_gemini(session, GEMINI_PROMPT.format(text=text), response_schema=GEMINI_RESPONSE_SCHEMA)
@@ -331,9 +349,14 @@ async def summarize_with_gemini(session: aiohttp.ClientSession, text: str) -> Op
     tier = str(result.get("tier") or "").strip().upper()
     if tier not in TIER_RANK:
         tier = None
-    message = str(result.get("message", "")).strip()
+    message = result.get("message")
+    if not isinstance(message, str):
+        return None
     if not valid_summary_html(message):
         log.warning("Gemini returned empty or disallowed summary HTML")
+        return None
+    message = normalize_summary(message)
+    if not message:
         return None
     return {
         "tier": tier,
@@ -408,8 +431,8 @@ def format_message(summary: str, tier: Optional[str] = None, *, source: str = ""
     if tier in TIER_BADGES:
         parts.append(tier)
     if summary:
-        parts.append(summary)
-    if source and (source != "Jin10" or url):
+        parts.append(normalize_summary(summary))
+    if source:
         label = f"來源：{escape(source)}"
         if url.startswith("https://"):
             label = f'<a href="{escape(url, quote=True)}">{label}</a>'
