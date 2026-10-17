@@ -700,9 +700,9 @@
       "telegram_delivery_failures": 0
     },
     "2026-10-17": {
-      "duplicates_blocked": 49458,
+      "duplicates_blocked": 69920,
       "gemini_failures": 16,
-      "keyword_filter_passed": 76,
+      "keyword_filter_passed": 89,
       "latency_ms": {
         "p50": null,
         "p95": null,
@@ -720,7 +720,7 @@
       },
       "queue_dropped_total": 0,
       "queue_high_water_mark": 2,
-      "received_events": 49766,
+      "received_events": 70324,
       "telegram_delivery_failures": 0
     }
   },
