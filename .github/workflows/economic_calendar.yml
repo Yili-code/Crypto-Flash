@@ -1,6 +1,11 @@
 name: Daily economic calendar
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/economic_calendar.py'
+      - '.github/workflows/economic_calendar.yml'
   schedule:
     # 08:00 Asia/Taipei = 00:00 UTC. GitHub may delay scheduled jobs.
     - cron: '0 0 * * *'

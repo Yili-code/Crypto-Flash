@@ -3,9 +3,11 @@
 import argparse
 import asyncio
 import json
+import re
+import calendar
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from html import escape
+from html import escape, unescape
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -29,11 +31,25 @@ EVENT_LABELS = {
     "FOMC Press Conference": "FOMC 記者會",
 }
 CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+RANGE_URL = "https://economic-calendar.tradingview.com/events"
+RANGE_LABELS = {
+    "CPI": "CPI", "CPI s.a": "CPI",
+    "Inflation Rate MoM": "CPI", "Inflation Rate YoY": "CPI",
+    "Core Inflation Rate MoM": "CPI", "Core Inflation Rate YoY": "CPI",
+    "Non Farm Payrolls": "非農就業",
+    "Fed Interest Rate Decision": "FOMC 利率決議",
+    "FOMC Press Conference": "FOMC 記者會",
+    "FOMC Economic Projections": "FOMC 經濟預測",
+}
 STATE_FILE = STATE_DIR / "economic_calendar_state.json"
 log = get_logger("economic-calendar")
 
 
 def select_events(payload: object, day: date) -> list[tuple[datetime, str]]:
+    if isinstance(payload, dict) and "range_events" in payload:
+        if payload.get("day") != day.isoformat():
+            raise ValueError("Calendar response belongs to a different Taiwan window")
+        return select_range_events(payload["range_events"], day)
     # Empty/stale/malformed feeds must never be interpreted as a quiet day.
     if not isinstance(payload, list) or not payload:
         raise ValueError("Calendar feed is empty or invalid")
@@ -67,6 +83,58 @@ def select_events(payload: object, day: date) -> list[tuple[datetime, str]]:
     return sorted(events)
 
 
+def select_range_events(payload: object, day: date) -> list[tuple[datetime, str]]:
+    if not isinstance(payload, dict) or payload.get("status") != "ok" or not isinstance(payload.get("result"), list):
+        raise ValueError("Date-range calendar response is invalid")
+    events = set()
+    for row in payload["result"]:
+        if not isinstance(row, dict) or not all(isinstance(row.get(k), str) and row[k] for k in ("title", "country", "date")):
+            raise ValueError("Date-range calendar entry is incomplete")
+        when = datetime.fromisoformat(row["date"])
+        if when.utcoffset() is None:
+            raise ValueError("Calendar timestamp has no timezone")
+        if row["country"] != "US" or not day <= when.astimezone(TAIPEI).date() < day + timedelta(days=WINDOW_DAYS):
+            raise ValueError("Date-range calendar returned events outside the requested window")
+        label = RANGE_LABELS.get(row["title"])
+        if label:
+            events.add((when.astimezone(timezone.utc), label))
+    return sorted(events)
+
+
+def fed_events(html: str, year: int, month: int) -> list[dict]:
+    """Read explicit times from the Fed's monthly calendar, never infer them."""
+    if "FOMC Meetings" not in html or f"{calendar.month_name[month]} {year}" not in html:
+        raise ValueError("Federal Reserve monthly calendar is incomplete")
+    rows = []
+    for block in html.split('class="panel-body"')[1:]:
+        columns = re.findall(r'<div class="col-xs-(?:2|7|3)">(.*?)</div>', block, re.S)
+        if len(columns) < 3:
+            continue
+        texts = [unescape(re.sub(r"<[^>]+>", " ", c)).strip() for c in columns[:3]]
+        title = "FOMC Press Conference" if "FOMC Press Conference" in texts[1] else None
+        if title:
+            match = re.fullmatch(r"(\d{1,2}):(\d{2})\s*([ap])\.m\.", texts[0])
+            if not match or not texts[2].isdigit():
+                raise ValueError("Federal Reserve event has an unsupported date or time")
+            hour, minute, half = match.groups()
+            when = datetime(year, month, int(texts[2]), int(hour) % 12 + (12 if half == "p" else 0), int(minute), tzinfo=SOURCE_TIMEZONE)
+            rows.append(dict(title=title, country="US", date=when.isoformat()))
+    return rows
+
+
+def projection_dates(html: str, year: int) -> set[date]:
+    section = re.search(rf'{year} FOMC Meetings(.*?)(?:\d{{4}} FOMC Meetings|\Z)', html, re.S)
+    if not section or "associated with a Summary of Economic Projections" not in html:
+        raise ValueError("Federal Reserve projection calendar is incomplete")
+    dates = set()
+    for month, days in re.findall(r'fomc-meeting__month[^>]*>\s*<strong>(\w+)</strong>.*?fomc-meeting__date[^>]*>([^<]+)', section[1], re.S):
+        if "*" in days:
+            dates.add(date(year, list(calendar.month_name).index(month), int(days.strip().rstrip("*").split("-")[-1])))
+    if not dates:
+        raise ValueError("Federal Reserve projection dates are missing")
+    return dates
+
+
 def render_messages(events: list[tuple[datetime, str]], day: date) -> list[str]:
     last_day = day + timedelta(days=WINDOW_DAYS - 1)
     end_label = last_day.strftime("%m/%d" if day.year == last_day.year else "%Y/%m/%d")
@@ -89,12 +157,48 @@ def render_messages(events: list[tuple[datetime, str]], day: date) -> list[str]:
 
 
 async def fetch_calendar(session: aiohttp.ClientSession) -> object:
+    day = datetime.now(TAIPEI).date()
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    try:
+        async with session.get(CALENDAR_URL, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as response:
+            response.raise_for_status()
+            payload = await response.json(content_type=None)
+        select_events(payload, day)
+        return payload
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, TypeError) as exc:
+        log.warning("Weekly calendar unavailable (%s); using date-range calendar", calendar_failure_reason(exc))
+    start = datetime.combine(day, datetime.min.time(), TAIPEI).astimezone(timezone.utc)
+    end = start + timedelta(days=WINDOW_DAYS)
+    headers["Origin"] = "https://www.tradingview.com"
     async with session.get(
-        CALENDAR_URL, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
-        timeout=aiohttp.ClientTimeout(total=30),
+        RANGE_URL, params={"from": start.isoformat().replace("+00:00", "Z"),
+                           "to": (end - timedelta(milliseconds=1)).isoformat().replace("+00:00", "Z"), "countries": "US"},
+        headers=headers, timeout=aiohttp.ClientTimeout(total=30),
     ) as response:
         response.raise_for_status()
-        return await response.json(content_type=None)
+        payload = await response.json(content_type=None)
+    select_range_events(payload, day)
+    # This provider omits FOMC press conferences; retain that coverage from the Fed.
+    months = {(start.astimezone(SOURCE_TIMEZONE).year, start.astimezone(SOURCE_TIMEZONE).month),
+              ((end - timedelta(microseconds=1)).astimezone(SOURCE_TIMEZONE).year,
+               (end - timedelta(microseconds=1)).astimezone(SOURCE_TIMEZONE).month)}
+    for year, month in sorted(months):
+        url = f"https://www.federalreserve.gov/newsevents/{year}-{calendar.month_name[month].lower()}.htm"
+        async with session.get(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"}, timeout=aiohttp.ClientTimeout(total=30)) as response:
+            response.raise_for_status()
+            official = fed_events(await response.text(), year, month)
+        payload["result"].extend(row for row in official if day <= datetime.fromisoformat(row["date"]).astimezone(TAIPEI).date() < day + timedelta(days=WINDOW_DAYS))
+    decisions = [row for row in payload["result"] if row["title"] == "Fed Interest Rate Decision"]
+    if decisions:
+        async with session.get("https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm", headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"}, timeout=aiohttp.ClientTimeout(total=30)) as response:
+            response.raise_for_status()
+            html = await response.text()
+        for row in decisions:
+            source_day = datetime.fromisoformat(row["date"]).astimezone(SOURCE_TIMEZONE).date()
+            if source_day in projection_dates(html, source_day.year):
+                payload["result"].append(dict(row, title="FOMC Economic Projections"))
+    log.info("Date-range calendar covers %s through %s", day, day + timedelta(days=1))
+    return {"day": day.isoformat(), "range_events": payload}
 
 
 async def load_messages(session: aiohttp.ClientSession, day: date) -> list[str]:

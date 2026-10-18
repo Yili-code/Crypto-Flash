@@ -1,7 +1,7 @@
 import asyncio
 import json
 from datetime import date, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
 import pytest
@@ -211,3 +211,89 @@ def test_long_rate_limit_does_not_retry_early(delivery, monkeypatch):
     fetcher.assert_awaited_once()
     ec.asyncio.sleep.assert_not_awaited()
     assert not ec.STATE_FILE.exists()
+
+
+def range_row(title="CPI", when="2026-10-19T12:30:00Z", country="US"):
+    return dict(title=title, date=when, country=country)
+
+
+def test_range_calendar_crosses_week_and_deduplicates_releases():
+    rows = [range_row(), range_row("Core Inflation Rate MoM"),
+            range_row("Non Farm Payrolls"), range_row("Nonfarm Payrolls Private"),
+            range_row("FOMC Minutes"), range_row("Fed Interest Rate Decision")]
+    events = ec.select_range_events(dict(status="ok", result=rows), date(2026, 10, 18))
+    assert {label for _, label in events} == {"CPI", "非農就業", "FOMC 利率決議"}
+    assert len(events) == 3
+
+
+@pytest.mark.parametrize("payload", [{}, {"status": "error", "result": []},
+    {"status": "ok", "result": None}, {"status": "ok", "result": [{}]},
+    {"status": "ok", "result": [range_row(when="2026-10-17T15:59:59Z")]},
+    {"status": "ok", "result": [range_row(when="2026-10-19T16:00:00Z")]},
+    {"status": "ok", "result": [range_row(when="2026-10-19T12:30:00")]},
+    {"status": "ok", "result": [range_row(country="GB")]}])
+def test_range_invalid_or_wrong_window_never_means_no_events(payload):
+    with pytest.raises(ValueError):
+        ec.select_range_events(payload, date(2026, 10, 18))
+
+
+def test_range_empty_success_and_window_identity():
+    payload = {"day": "2026-10-18", "range_events": dict(status="ok", result=[])}
+    assert ec.select_events(payload, date(2026, 10, 18)) == []
+    with pytest.raises(ValueError, match="different"):
+        ec.select_events(payload, date(2026, 10, 19))
+
+
+FED_MONTH = '''October 2026 FOMC Meetings <div class="panel-body">
+<div class="col-xs-2"><p>2:30 p.m.</p></div>
+<div class="col-xs-7"><p>FOMC Press Conference</p></div>
+<div class="col-xs-3"><p>28</p></div>'''
+
+
+def test_official_press_conference_uses_new_york_time():
+    rows = ec.fed_events(FED_MONTH, 2026, 10)
+    events = ec.select_range_events(dict(status="ok", result=rows), date(2026, 10, 29))
+    assert events == [(datetime.fromisoformat("2026-10-28T18:30:00+00:00"), "FOMC 記者會")]
+    with pytest.raises(ValueError):
+        ec.fed_events(FED_MONTH, 2026, 11)
+    with pytest.raises(ValueError):
+        ec.fed_events(FED_MONTH.replace("2:30 p.m.", "Tentative"), 2026, 10)
+
+
+def test_projection_dates_require_official_markers():
+    html = '''2026 FOMC Meetings
+    <div class="fomc-meeting__month"><strong>December</strong></div>
+    <div class="fomc-meeting__date">8-9*</div>
+    * Meeting associated with a Summary of Economic Projections.
+    2027 FOMC Meetings'''
+    assert ec.projection_dates(html, 2026) == {date(2026, 12, 9)}
+    with pytest.raises(ValueError):
+        ec.projection_dates(html, 2027)
+
+
+def test_live_fetch_falls_back_when_weekly_feed_is_stale(monkeypatch):
+    session = MagicMock()
+    def reply(payload=None, html=None, error=None):
+        response = MagicMock()
+        response.raise_for_status.side_effect = error
+        response.json = AsyncMock(return_value=payload)
+        response.text = AsyncMock(return_value=html)
+        context = MagicMock()
+        context.__aenter__ = AsyncMock(return_value=response)
+        context.__aexit__ = AsyncMock(return_value=False)
+        return context
+    # The source transport succeeds, but the weekly data is unusably old.
+    # Freeze today so the requested UTC interval and Fed month are deterministic.
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 18, 8, tzinfo=ec.TAIPEI)
+    monkeypatch.setattr(ec, "datetime", Clock)
+    session.get.side_effect = [reply([entry("2020-01-01T08:30:00-05:00")]),
+                              reply(dict(status="ok", result=[])),
+                              reply(html="October 2026 FOMC Meetings")]
+    result = asyncio.run(ec.fetch_calendar(session))
+    assert ec.select_events(result, date(2026, 10, 18)) == []
+    params = session.get.call_args_list[1].kwargs["params"]
+    assert params == {"from": "2026-10-17T16:00:00Z", "to": "2026-10-19T15:59:59.999000Z", "countries": "US"}
+    assert session.get.call_count == 3
