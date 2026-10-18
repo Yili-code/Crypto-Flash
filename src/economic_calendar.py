@@ -139,13 +139,20 @@ def render_messages(events: list[tuple[datetime, str]], day: date) -> list[str]:
     last_day = day + timedelta(days=WINDOW_DAYS - 1)
     end_label = last_day.strftime("%m/%d" if day.year == last_day.year else "%Y/%m/%d")
     header = '<b><a href="https://www.forexfactory.com/calendar">Event Reminder</a></b>\n'
-    header += f"{day:%Y/%m/%d}–{end_label} · 台灣時間\n"
+    header += f"{day:%Y/%m/%d}–{end_label} · Taiwan Time (UTC+8)\n"
     footer = ''
     if not events:
-        return [header + "\n這兩天沒有 CPI、非農或 FOMC。"]
+        return [header + "\nNo CPI, nonfarm payrolls, or FOMC events scheduled for these two days."]
     messages = []
     body = header
+    labels = {
+        "非農就業": "Nonfarm Payrolls",
+        "FOMC 利率決議": "FOMC Rate Decision",
+        "FOMC 記者會": "FOMC Press Conference",
+        "FOMC 經濟預測": "FOMC Economic Projections",
+    }
     for when, title in events:
+        title = labels.get(title, title)
         row = f"\n{when.astimezone(TAIPEI):%m/%d %H:%M}  {escape(title)}"
         if len((header + row + footer).encode("utf-16-le")) // 2 > 4000:
             raise ValueError("Calendar title exceeds message limit")

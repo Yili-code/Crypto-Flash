@@ -20,9 +20,9 @@ def test_taiwan_day_filter_sort_deduplicate_and_utc_rollover():
     events = ec.select_events(rows, date(2026, 9, 16))
     assert [title for _, title in events] == ["FOMC 利率決議", "CPI", "非農就業"]
     text = ec.render_messages(events, date(2026, 9, 16))[0]
-    assert "09/16 02:00  FOMC 利率決議" in text
+    assert "09/16 02:00  FOMC Rate Decision" in text
     assert "09/16 20:30  CPI" in text
-    assert "09/17 02:00  非農就業" in text
+    assert "09/17 02:00  Nonfarm Payrolls" in text
 
 
 def test_winter_offset_and_midnight_boundaries():
@@ -37,7 +37,7 @@ def test_no_events_explains_dates_scope_and_meaning():
     text = ec.render_messages(ec.select_events([entry(title="Retail Sales m/m")], date(2026, 9, 16)),
                               date(2026, 9, 16))[0]
     assert "2026/09/16–09/17" in text
-    assert "這兩天沒有 CPI、非農或 FOMC" in text
+    assert "No CPI, nonfarm payrolls, or FOMC events scheduled for these two days." in text
     assert "https://www.forexfactory.com/calendar" in text
 
 
@@ -92,7 +92,7 @@ def test_success_saved_and_rerun_skipped(delivery):
     assert json.loads(ec.STATE_FILE.read_text())["last_sent_date"] == datetime.now(ec.TAIPEI).date().isoformat()
     asyncio.run(ec.main())
     delivery.assert_awaited_once()
-    assert "這兩天沒有 CPI、非農或 FOMC" in delivery.call_args.args[2]
+    assert "No CPI, nonfarm payrolls, or FOMC events scheduled for these two days." in delivery.call_args.args[2]
 
 
 def test_send_failure_does_not_save(delivery):
@@ -138,7 +138,7 @@ def test_dry_run_does_not_send_or_save(delivery, capsys):
     asyncio.run(ec.main(dry_run=True))
     delivery.assert_not_awaited()
     assert not ec.STATE_FILE.exists()
-    assert "這兩天沒有 CPI、非農或 FOMC" in capsys.readouterr().out
+    assert "No CPI, nonfarm payrolls, or FOMC events scheduled for these two days." in capsys.readouterr().out
 
 
 def test_corrupt_state_stops_before_send(delivery):
