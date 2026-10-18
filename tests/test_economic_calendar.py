@@ -3,6 +3,7 @@ import json
 from datetime import date, datetime
 from unittest.mock import AsyncMock
 
+import aiohttp
 import pytest
 
 import economic_calendar as ec
@@ -109,7 +110,7 @@ def test_explicit_force_resends_today_without_changing_default_dedup(delivery):
 
 
 def test_fetch_failure_notifies_only_after_all_retries_and_does_not_save(delivery, monkeypatch):
-    fetcher = AsyncMock(side_effect=ValueError("bad feed"))
+    fetcher = AsyncMock(side_effect=asyncio.TimeoutError())
     monkeypatch.setattr(ec, "fetch_calendar", fetcher)
     with pytest.raises(RuntimeError, match="unavailable"):
         asyncio.run(ec.main())
@@ -117,14 +118,14 @@ def test_fetch_failure_notifies_only_after_all_retries_and_does_not_save(deliver
     assert ec.asyncio.sleep.await_count == 2
     delivery.assert_awaited_once()
     notice = delivery.call_args.args[2]
-    assert "Calendar data unavailable after retries." in notice
+    assert "Calendar data unavailable. Reminder was not marked as delivered." in notice
     assert "Taiwan Time" in notice
     assert "資料不完整" not in notice
     assert not ec.STATE_FILE.exists()
 
 
 def test_transient_fetch_failure_recovers_and_delivers(delivery, monkeypatch):
-    fetcher = AsyncMock(side_effect=[ValueError("temporary"), [entry()]])
+    fetcher = AsyncMock(side_effect=[asyncio.TimeoutError(), [entry()]])
     monkeypatch.setattr(ec, "fetch_calendar", fetcher)
     asyncio.run(ec.main())
     assert fetcher.await_count == 2
@@ -162,3 +163,51 @@ def test_two_day_window_fits_before_source_week_end():
 
 def test_unavailable_notice_uses_two_day_range_across_year_end():
     assert "2026/12/31–2027/01/01" in ec.render_unavailable_notice(date(2026, 12, 31))
+
+
+def test_feed_timezone_does_not_change_source_week():
+    rows = [entry("2026-10-12T07:00:00+08:00"),
+            entry("2026-10-18T08:00:00+08:00", "Retail Sales m/m")]
+    assert ec.select_events(rows, date(2026, 10, 12)) == [
+        (datetime.fromisoformat("2026-10-11T23:00:00+00:00"), "CPI")]
+    equivalent = [dict(row, date=datetime.fromisoformat(row["date"])
+                       .astimezone(ec.SOURCE_TIMEZONE).isoformat()) for row in rows]
+    assert ec.select_events(rows, date(2026, 10, 12)) == ec.select_events(
+        equivalent, date(2026, 10, 12))
+
+
+def test_real_cross_week_window_still_rejected():
+    with pytest.raises(ValueError, match="cover"):
+        ec.select_events([entry("2026-10-12T07:00:00+08:00")], date(2026, 10, 17))
+
+
+def test_invalid_data_is_not_repeatedly_fetched(delivery, monkeypatch):
+    fetcher = AsyncMock(side_effect=ValueError("Calendar feed spans unexpected weeks"))
+    monkeypatch.setattr(ec, "fetch_calendar", fetcher)
+    with pytest.raises(RuntimeError, match="spans unexpected weeks"):
+        asyncio.run(ec.main())
+    fetcher.assert_awaited_once()
+    ec.asyncio.sleep.assert_not_awaited()
+    assert not ec.STATE_FILE.exists()
+
+
+@pytest.mark.parametrize("retry_after, expected", [("90", 90), ("invalid", 60)])
+def test_rate_limit_respects_provider_delay(delivery, monkeypatch, retry_after, expected, caplog):
+    error = aiohttp.ClientResponseError(
+        None, (), status=429, headers={"Retry-After": retry_after})
+    monkeypatch.setattr(ec, "fetch_calendar", AsyncMock(side_effect=[error, [entry()]]))
+    asyncio.run(ec.main())
+    ec.asyncio.sleep.assert_awaited_once_with(expected)
+    assert "HTTP 429" in caplog.text
+
+
+def test_long_rate_limit_does_not_retry_early(delivery, monkeypatch):
+    error = aiohttp.ClientResponseError(
+        None, (), status=429, headers={"Retry-After": "600"})
+    fetcher = AsyncMock(side_effect=error)
+    monkeypatch.setattr(ec, "fetch_calendar", fetcher)
+    with pytest.raises(RuntimeError, match="beyond retry budget"):
+        asyncio.run(ec.main())
+    fetcher.assert_awaited_once()
+    ec.asyncio.sleep.assert_not_awaited()
+    assert not ec.STATE_FILE.exists()

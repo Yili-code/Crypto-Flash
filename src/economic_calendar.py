@@ -4,7 +4,9 @@ import argparse
 import asyncio
 import json
 from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from html import escape
+from zoneinfo import ZoneInfo
 
 import aiohttp
 
@@ -12,6 +14,7 @@ from common import STATE_DIR, get_logger
 from tg import TELEGRAM_CHAT_ID, send_telegram_message
 
 TAIPEI = timezone(timedelta(hours=8))
+SOURCE_TIMEZONE = ZoneInfo("America/New_York")
 WINDOW_DAYS = 2
 CALENDAR_RETRY_DELAYS = (30, 120)
 EVENT_LABELS = {
@@ -45,7 +48,7 @@ def select_events(payload: object, day: date) -> list[tuple[datetime, str]]:
         when = datetime.fromisoformat(row["date"])
         if when.utcoffset() is None:
             raise ValueError("Calendar timestamp has no timezone")
-        source_day = when.date()
+        source_day = when.astimezone(SOURCE_TIMEZONE).date()
         weeks.add(source_day - timedelta(days=(source_day.weekday() + 1) % 7))
         label = EVENT_LABELS.get(row["title"].strip())
         if (row["country"] == "USD" and label
@@ -55,7 +58,7 @@ def select_events(payload: object, day: date) -> list[tuple[datetime, str]]:
         raise ValueError("Calendar feed spans unexpected weeks")
     week_start = next(iter(weeks))
     # Refuse to declare no events unless the feed covers the full Taiwan window.
-    source_tz = datetime.fromisoformat(payload[0]["date"]).tzinfo
+    source_tz = SOURCE_TIMEZONE
     start = datetime.combine(day, datetime.min.time(), TAIPEI).astimezone(source_tz).date()
     end = (datetime.combine(day + timedelta(days=WINDOW_DAYS), datetime.min.time(), TAIPEI)
            - timedelta(microseconds=1)).astimezone(source_tz).date()
@@ -95,19 +98,36 @@ async def fetch_calendar(session: aiohttp.ClientSession) -> object:
 
 
 async def load_messages(session: aiohttp.ClientSession, day: date) -> list[str]:
-    """Fetch and validate the calendar without exposing intermediate failures."""
+    """Retry transport failures, but do not re-fetch deterministically invalid data."""
     for attempt in range(len(CALENDAR_RETRY_DELAYS) + 1):
         try:
             return render_messages(select_events(await fetch_calendar(session), day), day)
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, TypeError) as exc:
-            if attempt == len(CALENDAR_RETRY_DELAYS):
+            reason = calendar_failure_reason(exc)
+            if isinstance(exc, (ValueError, TypeError)) or attempt == len(CALENDAR_RETRY_DELAYS):
                 raise RuntimeError(
-                    "Calendar unavailable after retries; delivery state was not advanced"
+                    f"Calendar unavailable: {reason}; delivery state was not advanced"
                 ) from exc
             delay = CALENDAR_RETRY_DELAYS[attempt]
+            if isinstance(exc, aiohttp.ClientResponseError) and exc.status == 429:
+                delay = max(delay, 60)
+                retry_after = (exc.headers or {}).get("Retry-After", "")
+                try:
+                    requested = float(retry_after)
+                except ValueError:
+                    try:
+                        requested = (parsedate_to_datetime(retry_after)
+                                     - datetime.now(timezone.utc)).total_seconds()
+                    except (ValueError, TypeError, OverflowError):
+                        requested = 0
+                if requested > 180:
+                    raise RuntimeError(
+                        "Calendar rate limited beyond retry budget; delivery state was not advanced"
+                    ) from exc
+                delay = max(delay, requested)
             log.warning(
                 "Calendar unavailable (%s); retrying in %ss (attempt %s/%s)",
-                type(exc).__name__,
+                reason,
                 delay,
                 attempt + 2,
                 len(CALENDAR_RETRY_DELAYS) + 1,
@@ -116,12 +136,21 @@ async def load_messages(session: aiohttp.ClientSession, day: date) -> list[str]:
     raise AssertionError("Calendar retry loop exited unexpectedly")
 
 
+def calendar_failure_reason(exc: Exception) -> str:
+    """Describe failures without logging provider bodies or request headers."""
+    if isinstance(exc, aiohttp.ClientResponseError):
+        return f"HTTP {exc.status}"
+    if isinstance(exc, (ValueError, TypeError)):
+        return f"{type(exc).__name__}: {exc}"
+    return type(exc).__name__
+
+
 def render_unavailable_notice(day: date) -> str:
     last_day = day + timedelta(days=WINDOW_DAYS - 1)
     end_label = last_day.strftime("%m/%d" if day.year == last_day.year else "%Y/%m/%d")
     return (
         f"<b>Event Reminder</b>\n{day:%Y/%m/%d}–{end_label} · Taiwan Time\n\n"
-        "Calendar data unavailable after retries."
+        "Calendar data unavailable. Reminder was not marked as delivered."
     )
 
 
