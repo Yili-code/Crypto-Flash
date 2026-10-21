@@ -51,3 +51,6 @@ output/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Shared Codex lifecycle configuration
+!.codex/hooks.json

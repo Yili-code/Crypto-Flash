@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|clear|compact|fork)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/session_sync.py\"",
+            "commandWindows": "powershell.exe -NoProfile -Command \"& python (Join-Path (git rev-parse --show-toplevel) '.codex/session_sync.py')\"",
+            "timeout": 60,
+            "statusMessage": "Checking project sync and handoff context"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/session_sync.py\"",
+            "commandWindows": "powershell.exe -NoProfile -Command \"& python (Join-Path (git rev-parse --show-toplevel) '.codex/session_sync.py')\"",
+            "timeout": 60,
+            "statusMessage": "Checking project sync and handoff context"
+          }
+        ]
+      }
+    ]
+  }
+}
