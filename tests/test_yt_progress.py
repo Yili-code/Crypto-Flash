@@ -56,12 +56,14 @@ def test_summary_failure_stays_silent_then_sends_once_after_recovery(flow):
 
 def test_delivered_sections_use_telegram_bold_titles(flow):
     _, summary, research, send = flow
-    summary.return_value = "重點\n結論\n三個要點\n論證\n為何值得看\n用途"
+    summary.return_value = "重點\n結論\n\n• 要點一\n\n• 要點二\n\n• 要點三\n解決什麼問題\n釐清判斷難點"
     research.return_value = "補充與提醒\n支持。 [1]\n\n查證來源\n[1] Source"
     run()
     message = send.call_args.args[2]
-    assert "結論\n\n<b>三個要點</b>" in message
-    for title in ("重點", "三個要點", "為何值得看", "補充與提醒", "查證來源", "Source"):
+    assert "• 要點三\n\n<b>解決什麼問題</b>" in message
+    assert "三個要點" not in message
+    assert "為何值得看" not in message
+    for title in ("重點", "解決什麼問題", "補充與提醒", "查證來源", "Source"):
         assert f"<b>{title}</b>" in message
 
 

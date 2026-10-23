@@ -91,11 +91,11 @@ def test_format_message_rejects_a_missing_summary():
 
 
 def test_format_section_titles_bolds_only_declared_standalone_headings():
-    text = "重點\nBTC < ETH & SOL\n三個要點：不是標題\n三個要點\n- evidence"
+    text = "重點\nBTC < ETH & SOL\n解決什麼問題：不是標題\n解決什麼問題\n- evidence"
     rendered = yt.format_section_titles(text, yt.SUMMARY_SECTION_TITLES, escape_content=True)
     assert rendered == (
-        "<b>重點</b>\nBTC &lt; ETH &amp; SOL\n三個要點：不是標題\n\n"
-        "<b>三個要點</b>\n- evidence"
+        "<b>重點</b>\nBTC &lt; ETH &amp; SOL\n解決什麼問題：不是標題\n\n"
+        "<b>解決什麼問題</b>\n- evidence"
     )
 
 
