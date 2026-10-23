@@ -45,6 +45,7 @@ This is a GitHub Actions-driven automation project for tracking and filtering Ji
 - Parses messages and removes noise with keyword filtering
 - Sends relevant items to Gemini for grading and summary
 - Pushes important updates to Telegram
+- Complete CPI percentage releases sharing the source, country, reference month, and publication minute are collected for eight seconds from the first item, then delivered together with separate headline/core and YoY/MoM labels. Explicitly recognized Jin10 text and indicator cards are supported; other formats retain individual processing. Figures are rendered from source fields while Gemini still controls grading and relevance; no extra market-impact prose is generated. Identical values collapse and conflicting versions are labeled and retained, without claiming official verification. At most 32 groups and 16 items per group are buffered, with early processing at capacity. Late arrivals or restarts can still split a release; pending groups are in memory and inherit the queue's interruption risk. Unrelated news does not wait for the collection window.
 - Adds a Telegram Q&A mode with recent context memory
 - Monitors YouTube channel RSS feeds, summarizes new videos into an adaptive summary with external fact-checking, and pushes them to Telegram
 

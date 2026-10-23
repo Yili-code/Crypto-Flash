@@ -13,6 +13,7 @@ import aiohttp
 import websockets
 
 import classification_backlog as backlog
+from cpi_batch import merge_release, parse_release
 from feed_monitor import feed_loop
 from common import (
     CONTEXT_MAX_AGE_SEC,
@@ -42,6 +43,7 @@ WS_IDLE_TIMEOUT = int(os.getenv("WS_IDLE_TIMEOUT", "180"))
 # server to drop the connection.
 OUTBOX_MAXSIZE = int(os.getenv("OUTBOX_MAXSIZE", "200"))
 GEMINI_RECONNECT_DELAY = max(1.0, float(os.getenv("GEMINI_RECONNECT_DELAY", "30")))
+CPI_BATCH_SECONDS = 8.0
 
 UA_POOL = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -477,6 +479,8 @@ async def handle_item(session: aiohttp.ClientSession, item: dict, *, retrying: b
             return
         else:
             tier = result["tier"]
+            if item.get("_cpi_message"):
+                result["message"] = item["_cpi_message"]
             backlog.remove(backlog.item_identity(item))
             if tier in DISCARDED_TIERS:
                 forget_news(str(item.get("id") or ""))
@@ -543,15 +547,49 @@ def enqueue_item(outbox: "asyncio.Queue[dict]", item: dict) -> None:
 
 
 async def outbox_worker(session: aiohttp.ClientSession, outbox: "asyncio.Queue[dict]") -> None:
-    while True:
-        item = await outbox.get()
+    pending = {}
+
+    async def process(items):
         try:
+            item = merge_release(items) if parse_release(items[0]) else items[0]
             await handle_item(session, item)
         except Exception as exc:
             log.warning("Failed to process flash item: %s: %s", type(exc).__name__, exc)
             log.debug("Full traceback:", exc_info=True)
         finally:
-            outbox.task_done()
+            for _ in items:
+                outbox.task_done()
+
+    while True:
+        now = time.monotonic()
+        for key in list(pending):
+            deadline, items = pending[key]
+            if deadline <= now:
+                del pending[key]
+                await process(items)
+        try:
+            if pending:
+                timeout = max(0.001, min(value[0] for value in pending.values()) - time.monotonic())
+                item = await asyncio.wait_for(outbox.get(), timeout)
+            else:
+                item = await outbox.get()
+        except asyncio.TimeoutError:
+            continue
+        row = parse_release(item)
+        if row is None:
+            await process([item])
+            continue
+        key = row["key"]
+        if key not in pending:
+            if len(pending) >= 32:
+                oldest = next(iter(pending))
+                _, items = pending.pop(oldest)
+                await process(items)
+            pending[key] = (time.monotonic() + CPI_BATCH_SECONDS, [])
+        pending[key][1].append(item)
+        if len(pending[key][1]) >= 16:
+            _, items = pending.pop(key)
+            await process(items)
 
 
 async def ws_loop(session: aiohttp.ClientSession, outbox: "asyncio.Queue[dict]") -> None:
