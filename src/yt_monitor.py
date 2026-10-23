@@ -210,25 +210,32 @@ def format_section_titles(text: str, titles: frozenset[str], *, escape_content: 
     rendered = []
     for line in text.splitlines():
         stripped = line.strip()
-        safe_line = html_escape(line, quote=False) if escape_content else line
+        safe_line = html_escape(stripped, quote=False) if escape_content else stripped
+        if not stripped:
+            if rendered and rendered[-1] != "":
+                rendered.append("")
+            continue
         if stripped in titles:
             safe_title = html_escape(stripped, quote=False) if escape_content else stripped
             if rendered and rendered[-1] != "":
                 rendered.append("")
             rendered.append(f"<b>{safe_title}</b>")
         else:
+            if stripped.startswith("• ") and rendered and rendered[-1] != "":
+                rendered.append("")
             rendered.append(safe_line)
-    return "\n".join(rendered)
+    return "\n".join(rendered).strip()
 
 
 def format_message(channel_title: str, title: str, link: str, summary: str) -> str:
-    # Only the Gemini summary may contain HTML; the title and channel name are raw text
-    # and must be escaped, or an "&" / "<" in them makes Telegram reject the message.
+    # Escape metadata separately from the already rendered summary.
     if not summary.strip():
         raise ValueError("refusing to build a YouTube notification without a parsed summary")
     safe_title = html_escape(title, quote=False)
     safe_channel = html_escape(channel_title, quote=False)
-    return f"「{safe_title}」\n#{safe_channel}\n\n{summary}\n\n<b>Source</b> {link}"
+    safe_link = html_escape(link, quote=True)
+    body = re.sub(r"\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", summary.strip())
+    return f'<b>{safe_title}</b>\n<i>{safe_channel}</i>\n\n{body}\n\n<a href="{safe_link}">觀看原片 ↗</a>'
 
 
 # ─── 單一頻道的處理流程 ──────────────────────────────────────────────────────
