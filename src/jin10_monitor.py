@@ -43,7 +43,7 @@ WS_IDLE_TIMEOUT = int(os.getenv("WS_IDLE_TIMEOUT", "180"))
 # server to drop the connection.
 OUTBOX_MAXSIZE = int(os.getenv("OUTBOX_MAXSIZE", "200"))
 GEMINI_RECONNECT_DELAY = max(1.0, float(os.getenv("GEMINI_RECONNECT_DELAY", "30")))
-CPI_BATCH_SECONDS = 8.0
+CPI_BATCH_SECONDS = 3.0
 
 UA_POOL = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
