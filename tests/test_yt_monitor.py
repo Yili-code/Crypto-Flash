@@ -91,21 +91,21 @@ def test_format_message_rejects_a_missing_summary():
 
 
 def test_format_section_titles_bolds_only_declared_standalone_headings():
-    text = "一句話結論\nBTC < ETH & SOL\n主要論證：不是標題\n主要論證\n- evidence"
+    text = "重點\nBTC < ETH & SOL\n三個要點：不是標題\n三個要點\n- evidence"
     rendered = yt.format_section_titles(text, yt.SUMMARY_SECTION_TITLES, escape_content=True)
     assert rendered == (
-        "<b>一句話結論</b>\nBTC &lt; ETH &amp; SOL\n主要論證：不是標題\n"
-        "<b>主要論證</b>\n- evidence"
+        "<b>重點</b>\nBTC &lt; ETH &amp; SOL\n三個要點：不是標題\n\n"
+        "<b>三個要點</b>\n- evidence"
     )
 
 
 def test_muninn_prompts_require_compact_section_contracts():
-    assert "450–650 個中文字" in yt.SUMMARY_PROMPT
-    assert "3–5 點" in yt.SUMMARY_PROMPT
+    assert "200–300 個中文字" in yt.SUMMARY_PROMPT
+    assert "固定 3 點" in yt.SUMMARY_PROMPT
     assert all(title in yt.SUMMARY_PROMPT for title in yt.SUMMARY_SECTION_TITLES)
-    assert "250–400 個中文字" in yt.RESEARCH_PROMPT
-    assert "2–4 個可驗證論點" in yt.RESEARCH_PROMPT
-    assert {"查證結果", "理解修正"}.issubset(yt.RESEARCH_SECTION_TITLES)
+    assert "80–120 個中文字" in yt.RESEARCH_PROMPT
+    assert "1–2 個可驗證論點" in yt.RESEARCH_PROMPT
+    assert {"補充與提醒"}.issubset(yt.RESEARCH_SECTION_TITLES)
 
 
 # ─── channel configuration ─────────────────────────────────────────────────────
