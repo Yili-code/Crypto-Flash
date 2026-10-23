@@ -35,8 +35,8 @@ ATOM_NS = "{http://www.w3.org/2005/Atom}"
 YT_NS = "{http://www.youtube.com/xml/schemas/2015}"
 
 SUMMARY_PROMPT = """請完整觀看影片，濃縮成約 200–300 個中文字，讓讀者快速判斷核心觀點與觀看價值。
-依序呈現「重點」標題與一句話結論、三個直接列出的要點，以及「解決什麼問題」標題與痛點說明。只使用「重點」「解決什麼問題」兩個 section title，各自單獨一行，不加編號、冒號或其他標記；不要顯示「三個要點」標題。
-重點限 1 句，直接說影片最重要的結論。三個要點固定 3 點，每點以「• 」開頭、限 1 個短句，點與點之間空一行。
+直接以一句話結論開頭，不加「重點」標題；接著列出三個要點，最後呈現「解決什麼問題」標題與痛點說明。只使用「解決什麼問題」一個 section title，單獨一行，不加編號、冒號或其他標記；不要顯示「三個要點」標題。
+開場結論限 1 句，直接說影片最重要的結論。三個要點固定 3 點，每點以「• 」開頭、限 1 個短句，點與點之間空一行。
 只留核心主張、最有力證據與必要限制；行情分析保留情境及失效條件。刪除次要案例、重複、寒暄與宣傳。
 解決什麼問題限 1–2 個短句，具體交代讀者原本卡在哪個問題，以及影片提供什麼解釋、判斷依據或方法。只寫影片實際處理的痛點，不捏造觀眾處境、不誇大解決效果；若只提供觀點或背景，明確說只能協助釐清什麼，不宣稱問題已被解決。避免「幫助理解市場」等泛泛說法，不重複結論。
 自己的延伸解讀須標示，不替讀者編造持倉或操作指令。區分影片事實與主持人觀點，不補造數據、時間戳或聲稱已外部查證。
@@ -54,7 +54,7 @@ RESEARCH_PROMPT = """你是影片摘要的查證編輯。必須使用 Google Sea
 來源須支援相鄰論點，不編造引用、不宣稱整部影片均已驗證。輸出純文字，不使用 HTML、Markdown 或 emoji（條列符號 • 除外）。
 """
 
-SUMMARY_SECTION_TITLES = frozenset({"重點", "解決什麼問題"})
+SUMMARY_SECTION_TITLES = frozenset({"解決什麼問題"})
 RESEARCH_SECTION_TITLES = frozenset({"補充與提醒", "查證來源"})
 
 # ─── 頻道設定 ───────────────────────────────────────────────────────────────
@@ -210,6 +210,8 @@ def format_section_titles(text: str, titles: frozenset[str], *, escape_content: 
     rendered = []
     for line in text.splitlines():
         stripped = line.strip()
+        if titles == SUMMARY_SECTION_TITLES and stripped == "重點":
+            continue
         safe_line = html_escape(stripped, quote=False) if escape_content else stripped
         if not stripped:
             if rendered and rendered[-1] != "":
@@ -235,7 +237,7 @@ def format_message(channel_title: str, title: str, link: str, summary: str) -> s
     safe_channel = html_escape(channel_title, quote=False)
     safe_link = html_escape(link, quote=True)
     body = re.sub(r"\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", summary.strip())
-    return f'<b>{safe_title}</b>\n<i>{safe_channel}</i>\n\n{body}\n\n<a href="{safe_link}">觀看原片 ↗</a>'
+    return f'<b>{safe_title}</b>\n<i>{safe_channel}</i>\n\n{body}\n\n<a href="{safe_link}">觀看原片</a>'
 
 
 # ─── 單一頻道的處理流程 ──────────────────────────────────────────────────────

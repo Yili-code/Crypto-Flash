@@ -94,7 +94,7 @@ def test_format_section_titles_bolds_only_declared_standalone_headings():
     text = "重點\nBTC < ETH & SOL\n解決什麼問題：不是標題\n解決什麼問題\n- evidence"
     rendered = yt.format_section_titles(text, yt.SUMMARY_SECTION_TITLES, escape_content=True)
     assert rendered == (
-        "<b>重點</b>\nBTC &lt; ETH &amp; SOL\n解決什麼問題：不是標題\n\n"
+        "BTC &lt; ETH &amp; SOL\n解決什麼問題：不是標題\n\n"
         "<b>解決什麼問題</b>\n- evidence"
     )
 
@@ -290,10 +290,10 @@ def test_notification_layout_has_title_channel_and_compact_video_link():
     msg = yt.format_message('Chan & Co', 'A < B', 'https://x/1?a=1&b="2"', '\n<b>重點</b>\ntext\n\n\n• point\n')
     assert msg.startswith('<b>A &lt; B</b>\n<i>Chan &amp; Co</i>\n\n')
     assert '\n\n\n' not in msg
-    assert '<a href="https://x/1?a=1&amp;b=&quot;2&quot;">觀看原片 ↗</a>' in msg
+    assert '<a href="https://x/1?a=1&amp;b=&quot;2&quot;">觀看原片</a>' in msg
 
 
 def test_section_spacing_normalizes_blanks_and_separates_bullets():
     text = '\n重點\n結論\n• 第一點\n• 第二點\n\n\n解決什麼問題\n說明\n'
     result = yt.format_section_titles(text, yt.SUMMARY_SECTION_TITLES, escape_content=True)
-    assert result == '<b>重點</b>\n結論\n\n• 第一點\n\n• 第二點\n\n<b>解決什麼問題</b>\n說明'
+    assert result == '結論\n\n• 第一點\n\n• 第二點\n\n<b>解決什麼問題</b>\n說明'

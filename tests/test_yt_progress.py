@@ -63,7 +63,9 @@ def test_delivered_sections_use_telegram_bold_titles(flow):
     assert "• 要點三\n\n<b>解決什麼問題</b>" in message
     assert "三個要點" not in message
     assert "為何值得看" not in message
-    for title in ("重點", "解決什麼問題", "補充與提醒", "查證來源"):
+    assert "<b>重點</b>" not in message
+    assert "\n重點\n" not in message
+    for title in ( "解決什麼問題", "補充與提醒", "查證來源"):
         assert f"<b>{title}</b>" in message
 
 
