@@ -3,7 +3,12 @@ name: YouTube monitor agent
 on:
   schedule:
     - cron: "0,30 */1 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      probe_search:
+        description: Validate grounded search without sending Telegram messages
+        type: boolean
+        default: false
 
 concurrency:
   group: yt_channel_monitor
@@ -43,8 +48,13 @@ jobs:
           GEMINI_SEARCH_MODEL: ${{ vars.GEMINI_SEARCH_MODEL }}
           GEMINI_YOUTUBE_DAILY_REQUESTS: ${{ vars.GEMINI_YOUTUBE_DAILY_REQUESTS }}
           GEMINI_POLICY_REVISION: ${{ vars.GEMINI_POLICY_REVISION }}
+          PROBE_SEARCH: ${{ inputs.probe_search }}
         # Leave five minutes for persistence even when summarization stalls.
         run: |
+          if [ "$PROBE_SEARCH" = "true" ]; then
+            python src/yt_search_probe.py
+            exit $?
+          fi
           set +e
           timeout --signal=INT --kill-after=30s 24m python src/yt_monitor.py
           status=$?

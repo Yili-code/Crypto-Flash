@@ -229,3 +229,16 @@ def test_quota_diagnostics_excludes_messages_and_identifiers():
     assert policy.quota_diagnostics({"error": {"details": [{
         "@type": "google.rpc.QuotaFailure", "violations": "malformed",
     }]}}) == []
+
+
+@pytest.mark.parametrize("model_status,category", [(200, "provider_unavailable"), (404, "model_configuration"),
+                                                   (503, "provider_unavailable")])
+def test_request_404_only_blocks_when_model_is_confirmed_missing(clock, model_status, category):
+    session = FakeSession([FakeResponse(404), FakeResponse(model_status)])
+    assert call(session) is None
+    state = policy.read_state("youtube")
+    assert state["last_error"] == category
+    assert state["blocked"] is (model_status == 404)
+    assert state["used"] == 1
+    assert session.calls[1]["method"] == "GET"
+    assert session.calls[1]["headers"]["x-goog-api-key"] == "test-private-key"

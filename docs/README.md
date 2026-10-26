@@ -445,3 +445,6 @@ Gemini 429 日誌會記錄請求類型、模型、重試提示與配額指標／
 
 
 YouTube 可用 GEMINI_SEARCH_MODEL 明確指定 Google Search 查證專用模型；未設定時沿用 GEMINI_MODEL，影片摘要不切換。設定變更只重評估錯誤狀態，不清除當日請求計數。Gemini 3.5 Flash-Lite 的免費 API tier 不提供 Search grounding，需明確選擇支援的模型或啟用付費帳務。
+
+
+Gemini 請求回 404 時會先查模型是否存在，只有模型也回 404 才永久封鎖；其餘以可重試錯誤退避。YouTube workflow 的 probe_search=true 可做一次有引用校驗的搜尋測試，不發送 Telegram，請求仍由 YouTube 配額與單一 workflow 保存。

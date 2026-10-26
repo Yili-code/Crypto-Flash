@@ -9,3 +9,6 @@
 commit/push：待保存驗證結果。
 
 正式驗證run40319704818/job121561213494失敗：Search模型回HTTP404/model_configuration，觸發scope配置封鎖；狀態保存success。不能稱查證模型已可用。準備以正式key（header，非URL）讀取模型catalog，並回復原設定，避免保留失敗部署。
+
+模型catalog run40320397547/job121563576036成功，正式key清單明列gemini-2.5-flash-lite與generateContent。因此更正：第一次請求404不能直接判定整個模型不可用。已回復原3.5搜尋設定，沒有啟用帳務或改摘要模型。
+新增404模型存在性確認（模型metadata GET200/網路不確定時退避，不永久封鎖；metadata404才配置封鎖），以政策實作revision3重新評估舊誤封鎖且保留當日used；新增YT單writer probe_search測試入口，使用原youtube配額並且不發Telegram。367項完整測試與Ruff通過，準備推送後重新套用使用者已同意的2.5並先probe。

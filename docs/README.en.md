@@ -439,3 +439,6 @@ Privileged and paid commands fail closed: an empty TELEGRAM_OWNER_USER_IDS denie
 
 
 YouTube supports an explicit GEMINI_SEARCH_MODEL for Google Search verification. Unset values preserve GEMINI_MODEL; video summarization stays on the main model. Configuration changes re-evaluate error state without resetting the daily request count. Gemini 3.5 Flash-Lite does not offer Search grounding on the free API tier; choose a supported model explicitly or enable billing.
+
+
+A Gemini request returning 404 triggers a model availability check. Only a model lookup returning 404 creates a permanent configuration block; other outcomes use retry backoff. The YouTube workflow supports probe_search=true for one citation-validated grounding check without Telegram delivery, using its existing request ledger and single writer.

@@ -17,7 +17,7 @@ GEMINI_SEARCH_MODEL = os.getenv("GEMINI_SEARCH_MODEL", "").strip() or GEMINI_MOD
 
 log = get_logger("gemini")
 _scope_locks = {}
-POLICY_IMPLEMENTATION_REVISION = "2"
+POLICY_IMPLEMENTATION_REVISION = "3"
 
 
 def current_config_id() -> str:
@@ -117,6 +117,22 @@ async def _call_gemini(
                     error_data = {}
                 category, delay = policy.classify(resp.status, error_data if isinstance(error_data, dict) else {},
                                                   getattr(resp, "headers", {}))
+                if resp.status == 404:
+                    # A request resource can be missing even when its model exists.
+                    # Verify the model before persisting a permanent configuration block.
+                    model_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}"
+                    try:
+                        async with session.get(model_url, headers=headers,
+                                               timeout=aiohttp.ClientTimeout(total=15)) as check:
+                            if check.status == 200:
+                                category = "provider_unavailable"
+                            elif check.status != 404:
+                                category = "provider_unavailable"
+                    except (aiohttp.ClientError, asyncio.TimeoutError):
+                        category = "provider_unavailable"
+                    log.warning("Gemini request 404 operation=%s model=%s category=%s",
+                                "search" if google_search else "video" if extra_parts else "text",
+                                model, category)
                 policy.failed(usage_scope, category, request_id, delay)
                 log.warning("Gemini [%s] HTTP %s: %s", usage_scope, resp.status, category)
                 if resp.status == 429:
