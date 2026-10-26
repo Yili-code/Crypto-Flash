@@ -194,3 +194,12 @@ def quota_diagnostics(data: dict) -> list[dict]:
             if row:
                 result.append(row)
     return result[:10]
+
+
+def model_access_restricted(data: dict) -> bool:
+    """A listed model may still deny generation to new API users."""
+    error = data.get("error")
+    if not isinstance(error, dict):
+        return False
+    message = error.get("message")
+    return isinstance(message, str) and "no longer available to new users" in message.casefold()

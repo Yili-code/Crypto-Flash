@@ -442,3 +442,6 @@ YouTube supports an explicit GEMINI_SEARCH_MODEL for Google Search verification.
 
 
 A Gemini request returning 404 triggers a model availability check. Only a model lookup returning 404 creates a permanent configuration block; other outcomes use retry backoff. The YouTube workflow supports probe_search=true for one citation-validated grounding check without Telegram delivery, using its existing request ledger and single writer.
+
+
+A model catalog entry does not guarantee generation access for new projects. An explicit provider response that a model is no longer available to new users blocks automatic retries until an authorized, usable configuration is provided. Catalog or pricing listings alone are not recovery evidence.

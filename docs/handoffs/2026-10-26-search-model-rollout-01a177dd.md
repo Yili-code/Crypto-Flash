@@ -14,3 +14,6 @@ commit/push：待保存驗證結果。
 新增404模型存在性確認（模型metadata GET200/網路不確定時退避，不永久封鎖；metadata404才配置封鎖），以政策實作revision3重新評估舊誤封鎖且保留當日used；新增YT單writer probe_search測試入口，使用原youtube配額並且不發Telegram。367項完整測試與Ruff通過，準備推送後重新套用使用者已同意的2.5並先probe。
 
 最小probe run40320856263/job121565127005仍HTTP404；metadata確認模型存在，現已分類provider_unavailable而非永久block。摘要模型保持3.5，搜尋為使用者同意的2.5；待取得固定公開probe的遮罩錯誤訊息。新增僅限固定公開prompt的trace診斷，32項相關測試/Ruff通過，不能用於私人prompt。
+
+確切根因：遮罩probe run40321203612/job121566287368，Google回覆This model models/gemini-2.5-flash-lite is no longer available to new users，建議3.5與Interactions API。並非catalog缺失，也不是一次暫時404。使用者同意的免費替代方案對目前API專案不可用，不能宣稱已修好。
+新增對明確新使用者不可用回覆的配置封鎖，避免metadata200造成無限退避重試；保留未知404的查核與退避。準備回復原3.5搜尋設定，摘要維持3.5，pending不丟棄。不開billing、不換未授權第三模型、不關grounding。新測試確認一次失敗後不再發請求。

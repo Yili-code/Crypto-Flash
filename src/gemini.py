@@ -17,7 +17,7 @@ GEMINI_SEARCH_MODEL = os.getenv("GEMINI_SEARCH_MODEL", "").strip() or GEMINI_MOD
 
 log = get_logger("gemini")
 _scope_locks = {}
-POLICY_IMPLEMENTATION_REVISION = "3"
+POLICY_IMPLEMENTATION_REVISION = "4"
 
 
 def current_config_id() -> str:
@@ -117,7 +117,7 @@ async def _call_gemini(
                     error_data = {}
                 category, delay = policy.classify(resp.status, error_data if isinstance(error_data, dict) else {},
                                                   getattr(resp, "headers", {}))
-                if resp.status == 404:
+                if resp.status == 404 and not policy.model_access_restricted(error_data):
                     # A request resource can be missing even when its model exists.
                     # Verify the model before persisting a permanent configuration block.
                     model_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}"

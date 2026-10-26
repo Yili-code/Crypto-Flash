@@ -242,3 +242,14 @@ def test_request_404_only_blocks_when_model_is_confirmed_missing(clock, model_st
     assert state["used"] == 1
     assert session.calls[1]["method"] == "GET"
     assert session.calls[1]["headers"]["x-goog-api-key"] == "test-private-key"
+
+
+def test_listed_model_denied_to_new_users_is_not_retried(clock):
+    session = FakeSession([FakeResponse(404, json_data={"error": {
+        "message": "This model is no longer available to new users."
+    }})])
+    assert call(session) is None
+    assert policy.read_state("youtube")["blocked"]
+    assert policy.read_state("youtube")["last_error"] == "model_configuration"
+    assert call(session) is None
+    assert len(session.calls) == 1

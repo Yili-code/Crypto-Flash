@@ -448,3 +448,6 @@ YouTube 可用 GEMINI_SEARCH_MODEL 明確指定 Google Search 查證專用模型
 
 
 Gemini 請求回 404 時會先查模型是否存在，只有模型也回 404 才永久封鎖；其餘以可重試錯誤退避。YouTube workflow 的 probe_search=true 可做一次有引用校驗的搜尋測試，不發送 Telegram，請求仍由 YouTube 配額與單一 workflow 保存。
+
+
+模型清單存在不代表新專案可生成。若 API 明確回覆該模型不再開放新使用者，會封鎖自動重試，須更換為已授權且可用的設定；不得以模型清單或定價表宣稱已恢復。
