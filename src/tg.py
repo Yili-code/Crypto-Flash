@@ -8,6 +8,7 @@ from typing import Optional
 import aiohttp
 
 from common import get_logger
+from chinese_output import traditional_chinese_message
 
 TELEGRAM_BOT_TOKEN_01 = os.getenv("TELEGRAM_BOT_TOKEN_01", "")
 TELEGRAM_BOT_TOKEN_02 = os.getenv("TELEGRAM_BOT_TOKEN_02", "")
@@ -70,6 +71,7 @@ async def send_telegram_message(
         log.warning("Telegram is not configured; skipping send:\n%s", text[:200])
         return False
 
+    text = traditional_chinese_message(text)
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     base_payload: dict = {
         "chat_id": chat_id,

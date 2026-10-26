@@ -433,3 +433,6 @@ AI 生成的摘要與分析僅供參考，不構成任何投資建議。市場�
 
 
 Telegram menu 僅列出可直接執行的 /news、/important、/digest、/tracks、/updates、/status、/help。需要參數的指令仍可手動輸入，完整語法見 /help。Assistant 啟動時更新預設選單；更新失敗不會中止服務。
+
+
+所有共用 Telegram 發送流程會將可見中文轉為臺灣繁體字形，包含 /news、/search 的來源摘錄與 AI 回覆。英文不翻譯；HTML、網址與 code/pre 內容保留。原始新聞與追蹤比對不變，不增加 AI 呼叫；已送出的舊訊息不會回溯修改。

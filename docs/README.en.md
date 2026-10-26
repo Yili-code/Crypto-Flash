@@ -427,3 +427,6 @@ The grading prompt caps routine speech previews without actual remarks or new po
 
 
 The Telegram menu lists one-tap commands: /news, /important, /digest, /tracks, /updates, /status, and /help. Parameterized commands remain available by typing them; see /help for syntax. The assistant refreshes the default menu at startup; a menu update failure does not stop the service.
+
+
+The shared Telegram sender converts visible Chinese prose to Taiwan Traditional Chinese, including /news and /search excerpts and AI replies. English is not translated; HTML, URLs, and code/pre contents are preserved. Stored source data and topic matching remain unchanged, with no extra AI requests. Previously delivered messages are not edited.

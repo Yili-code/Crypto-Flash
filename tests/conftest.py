@@ -4,6 +4,7 @@ import tg
 import yt_monitor
 import gemini_policy
 import monitoring_metrics
+import telegram_menu
 import telegram_assistant
 import telegram_update_state
 import classification_backlog
@@ -44,6 +45,7 @@ def _no_send_throttle(monkeypatch):
 def _pinned_credentials(monkeypatch):
     """common.py loads the developer's .env at import time. Pin the values these modules
     captured so the suite behaves the same locally and on a bare CI runner."""
+    monkeypatch.setattr(telegram_menu, "TELEGRAM_BOT_TOKEN_01", "")
     monkeypatch.setattr(tg, "TELEGRAM_BOT_TOKEN_01", "token-01")
     monkeypatch.setattr(tg, "TELEGRAM_BOT_TOKEN_02", "token-02")
     monkeypatch.setattr(tg, "TELEGRAM_CHAT_ID", "-100test")
