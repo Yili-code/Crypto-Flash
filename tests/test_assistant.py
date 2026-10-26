@@ -147,3 +147,9 @@ def test_empty_context_does_not_generate_market_claims(tmp_path, monkeypatch):
     assert "資料覆蓋不足" in answer
     assert "目前不做推測" in answer
     model.assert_not_called()
+
+
+@pytest.mark.parametrize("user_id", [123, None, "", "456"])
+def test_missing_owner_allowlist_denies_privileged_access(monkeypatch, user_id):
+    monkeypatch.setattr(qa, "OWNER_USER_IDS", set())
+    assert not qa.sender_is_authorized(user_id)

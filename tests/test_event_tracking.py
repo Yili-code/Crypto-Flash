@@ -163,6 +163,7 @@ def test_listener_acknowledges_only_successful_sends(tracking, monkeypatch, deli
     tracking.append(news("one", 1001))
     monkeypatch.setattr(qa, "TELEGRAM_CHAT_ID", "allowed")
     monkeypatch.setattr(qa, "get_bot_username", AsyncMock(return_value="bot"))
+    monkeypatch.setattr(qa, "OWNER_USER_IDS", {"123"})
     sender = AsyncMock(return_value=delivered)
     monkeypatch.setattr(qa, "send_telegram_message", sender)
     model = AsyncMock()
@@ -178,7 +179,7 @@ def test_listener_acknowledges_only_successful_sends(tracking, monkeypatch, deli
             return FakeResponse(200, json_data={"result": [
                 {"update_id": 1, "message": {"chat": {"id": "other", "type": "group"}, "text": "/untrack BTC"}},
                 {"update_id": 2, "message": {"chat": {"id": "allowed", "type": "group"}, "text": "/updates@other"}},
-                {"update_id": 3, "message": {"chat": {"id": "allowed", "type": "group"}, "text": "/updates@bot"}},
+                {"update_id": 3, "message": {"chat": {"id": "allowed", "type": "group"}, "text": "/updates@bot", "from": {"id": 123}}},
             ]})
 
     with pytest.raises(asyncio.CancelledError):

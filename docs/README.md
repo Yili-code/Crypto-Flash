@@ -439,3 +439,6 @@ Telegram menu 僅列出可直接執行的 /news、/important、/digest、/tracks
 
 
 Gemini 429 日誌會記錄請求類型、模型、重試提示與配額指標／限制，排除原始錯誤訊息、prompt 與專案識別碼。
+
+
+管理與付費指令採 fail-closed：TELEGRAM_OWNER_USER_IDS 未設定時拒絕執行；只有 allowlist 中的 Telegram user ID 可以使用 /ask、/digest、/health 與追蹤管理指令。一般新聞查詢仍依原聊天室限制提供。

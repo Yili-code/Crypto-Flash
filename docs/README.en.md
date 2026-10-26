@@ -433,3 +433,6 @@ The shared Telegram sender converts visible Chinese prose to Taiwan Traditional 
 
 
 Gemini 429 logs include the operation, model, retry hint, and quota metrics/limits, excluding raw error messages, prompts, and project identifiers.
+
+
+Privileged and paid commands fail closed: an empty TELEGRAM_OWNER_USER_IDS denies access. Only allowlisted Telegram user IDs may use /ask, /digest, /health, and tracking management commands. Ordinary news queries retain the existing chat restriction.

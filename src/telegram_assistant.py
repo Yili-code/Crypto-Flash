@@ -178,7 +178,7 @@ def requires_owner(text: str, bot_username: str, chat_type: str) -> bool:
 
 
 def sender_is_authorized(user_id: object) -> bool:
-    return not OWNER_USER_IDS or str(user_id or "") in OWNER_USER_IDS
+    return bool(OWNER_USER_IDS) and str(user_id or "") in OWNER_USER_IDS
 
 
 async def build_reply(session: aiohttp.ClientSession, text: str, bot_username: str, chat_type: str) -> Optional[str]:

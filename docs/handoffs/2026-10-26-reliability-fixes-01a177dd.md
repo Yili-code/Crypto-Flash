@@ -9,3 +9,5 @@
 commit/push/deploy：待完成；所有外部操作另記驗證結果。
 
 階段：Bankless 修正 821ca33 已推送；安全 quota 診斷實作完成，33 項相關測試與 Ruff 通過，準備正式 YouTube 執行核對真正的 429 metric。
+
+Owner：已依唯一匹配的 creator 名字/username 核對使用者，將 ID 加密更新 GitHub TELEGRAM_OWNER_USER_IDS secret，metadata 更新成功（2026-10-26T11:49:21Z）。ID 未輸出或存入 repo。程式改為空 allowlist deny，付費/管理功能不再 fail open；準備測試與重啟。
