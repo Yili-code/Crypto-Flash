@@ -11,7 +11,7 @@ from datetime import datetime
 from html import escape, unescape
 from pathlib import Path
 
-from common import STATE_DIR, TIER_LEVELS
+from common import STATE_DIR
 from daily_digest import DISPLAY_TZ
 from news_archive import load_archive
 
@@ -105,10 +105,10 @@ def _clip(text: str, limit: int) -> str:
 
 def _row(item: dict, topics: list[str] | None = None) -> str:
     stamp = datetime.fromtimestamp(item["ts"], DISPLAY_TZ).strftime("%m/%d %H:%M")
-    tier = item.get("tier") if item.get("tier") in TIER_LEVELS else "未分級"
-    is_summary = bool(item["summary"])
     text = item["summary"] or " · ".join(part for part in (item["title"], item["content"]) if part)
-    row = f"<b>{stamp} · {tier}</b> · {'摘要節錄' if is_summary else '來源摘錄'}\n{escape(_clip(text, 200))}"
+    source = _phrase(str(item.get("source") or ""))
+    label = stamp + (f" · {escape(_clip(source, 40))}" if source else "")
+    row = f"{label}\n{escape(_clip(text, 160))}"
     if topics:
         labels = "、".join(topics[:2]) + (f" 等 {len(topics)} 個主題" if len(topics) > 2 else "")
         row += "\n追蹤：" + escape(labels)
@@ -127,10 +127,10 @@ def _updates(topics: list[dict], records: list[dict], keyword: str = "") -> Even
         if matches:
             pending.append((item, matches))
     if not pending:
-        return EventReply("<b>追蹤進展</b>\n目前保存的 72 小時資料中，沒有尚未讀取的新紀錄。\n可用 /timeline 關鍵字回顧；資料未同步或已過期的進展無法在此確認。")
+        return EventReply("<b>追蹤進展</b>\n目前沒有新進展。")
     rows, progress = [], {}
     for item, matches in pending[:MAX_EVENTS]:
-        row = _row(item, [topic["keyword"] for topic in matches])
+        row = _row(item, [topic["keyword"] for topic in matches] if len(topics) > 1 else None)
         if not _fits(rows, row):
             break
         rows.append(row)
@@ -140,7 +140,7 @@ def _updates(topics: list[dict], records: list[dict], keyword: str = "") -> Even
     command = "/updates" + (f" {escape(keyword)}" if keyword else "")
     footer = f"\n\n還有 {remaining} 則，使用 {command} 繼續讀取。" if remaining else ""
     return EventReply(
-        f"<b>追蹤進展</b>\n新增 {len(pending)} 則，本次顯示 {len(rows)} 則 · UTC+8 · 按收錄時間由舊到新\n\n"
+        "<b>追蹤進展</b>\n\n"
         + "\n\n".join(rows) + footer, progress,
     )
 
@@ -175,24 +175,23 @@ def event_command_reply(name: str, args: str) -> EventReply:
                 break
             rows.insert(0, row)
         body = "\n\n".join(rows) or "沒有符合的保存紀錄。"
-        return EventReply(f"<b>事件時間線：{escape(args)}</b>\n最近 72 小時 · UTC+8 · 關鍵字比對\n"
-                          f"顯示最新 {len(rows)} / {len(matched)} 則，按收錄時間排序\n\n" + body)
+        return EventReply(f"<b>{escape(args)} · 最近動態</b>\n\n" + body)
     topics = load_topics()
     selected = next((topic for topic in topics if topic["keyword"].casefold() == args.casefold()), None)
     if name == "track":
         if selected:
-            return EventReply(f"已在追蹤：{escape(selected['keyword'])}。閱讀進度不變。")
+            return EventReply(f"已在追蹤：{escape(selected['keyword'])}。")
         if len(topics) >= MAX_TOPICS:
             return EventReply(f"最多追蹤 {MAX_TOPICS} 個主題，請先用 /untrack 關鍵字移除不需要的主題。")
         now = time.time()
         topics.append({"keyword": args, "created_at": now, "cursor": [now, ""]})
         _save_topics(topics)
-        return EventReply(f"已開始追蹤：<b>{escape(args)}</b>\n/updates 查看加入後的新進展；/timeline {escape(args)} 回顧已保存紀錄。\n使用完整詞組、不分大小寫比對。")
+        return EventReply(f"已開始追蹤：<b>{escape(args)}</b>\n用 /updates 查看新進展。")
     if name == "untrack":
         if not selected:
             return EventReply("沒有追蹤這個主題。使用 /tracks 查看清單。")
         _save_topics([topic for topic in topics if topic is not selected])
-        return EventReply(f"已停止追蹤：{escape(selected['keyword'])}。保存的新聞仍可查詢。")
+        return EventReply(f"已停止追蹤：{escape(selected['keyword'])}。")
     if name == "updates" and args:
         if not selected:
             return EventReply("沒有追蹤這個主題。請先 /track 關鍵字。")
@@ -207,5 +206,5 @@ def event_command_reply(name: str, args: str) -> EventReply:
                         for item in records)
             rows.append(f"• {escape(topic['keyword'])} — 新增 {count} 則")
         return EventReply("<b>追蹤清單</b>\n" + "\n".join(rows)
-                          + "\n\n/updates 讀取新增進展；/timeline 關鍵字回顧。\n清單與閱讀進度由設定的聊天室共用。")
+                          + "\n\n/updates 查看新進展。")
     return _updates(topics, records, args)

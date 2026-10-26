@@ -41,7 +41,7 @@ def test_startup_failure_recovers_and_only_pushes_summaries(monkeypatch, monitor
     assert probe.await_count == 2
     assert pauses == [jm.GEMINI_RECONNECT_DELAY] * 2
     monitor.assert_awaited_once()
-    assert monitor.call_args.args[2] == "CRITICAL\nRecovered summary\n來源：Jin10"
+    assert monitor.call_args.args[2] == "<b>重大消息</b>\nRecovered summary\n來源：Jin10"
 
 
 def test_runtime_failure_pauses_following_pushes(monkeypatch, monitor):

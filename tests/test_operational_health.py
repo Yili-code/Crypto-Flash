@@ -21,9 +21,11 @@ def test_health_reports_current_block_and_pending_work(tmp_path, monkeypatch):
 
     rendered = health.render_health_html()
 
-    assert "CRITICAL" in rendered
-    assert "YouTube pending 1" in rendered
-    assert "Flash classification pending 1" in rendered
+    assert "服務需要處理" in rendered
+    assert "YouTube：1 部影片待完成" in rendered
+    assert "新聞：1 則消息待整理" in rendered
+    assert "AI 服務設定有誤" in rendered
+    assert "model_configuration" not in rendered
 
 
 def test_stale_block_from_old_configuration_is_not_current(monkeypatch):
@@ -32,3 +34,18 @@ def test_stale_block_from_old_configuration_is_not_current(monkeypatch):
         "retry_at": 0, "last_error": "authentication", "blocked": True, "rejected": [],
     })
     assert health.current_scope_block("youtube") == ""
+
+
+def test_healthy_snapshot_does_not_print_zero_counters_or_claim_connectivity(monkeypatch):
+    monkeypatch.setattr(health, "collect_health", lambda: ([], {}))
+    text = health.render_health_html()
+    assert text == "<b>服務檢查</b>\n目前未發現異常。"
+    assert "連線正常" not in text
+
+
+def test_health_preserves_critical_failures_without_exposing_internal_paths(monkeypatch):
+    issues = [health.HealthIssue("critical", "live", "cannot read private/path/state.json")]
+    monkeypatch.setattr(health, "collect_health", lambda: (issues, {}))
+    text = health.render_health_html()
+    assert "服務需要處理" in text and "狀態資料無法讀取" in text
+    assert "private/path" not in text

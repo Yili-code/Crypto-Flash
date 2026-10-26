@@ -98,22 +98,28 @@ def collect_health() -> tuple[list[HealthIssue], dict]:
 
 def render_health_html() -> str:
     issues, details = collect_health()
-    critical = sum(issue.severity == "critical" for issue in issues)
-    warning = sum(issue.severity == "warning" for issue in issues)
-    status = "CRITICAL" if critical else "WARNING" if warning else "HEALTHY"
-    rows = [
-        f"<b>Operational health: {status}</b>",
-        f"Critical {critical} · Warning {warning}",
-        (
-            f"YouTube pending {details['youtube_pending']} · "
-            f"Flash classification pending {details['classification_pending']}"
-        ),
-    ]
-    for issue in issues[:8]:
-        rows.append(f"• {escape(issue.component)}: {escape(issue.message)}")
     if not issues:
-        rows.append("All recorded health checks are within their configured boundaries.")
-    rows.append("This reports persisted application state, not external provider uptime.")
+        return "<b>服務檢查</b>\n目前未發現異常。"
+    critical = any(issue.severity == "critical" for issue in issues)
+    rows = ["<b>服務需要處理</b>" if critical else "<b>服務需要留意</b>"]
+    labels = {"live": "新聞", "youtube": "YouTube", "digest": "日報", "telegram": "管理權限"}
+    ordered = sorted(issues, key=lambda issue: issue.severity != "critical")
+    for issue in ordered[:8]:
+        if issue.message.startswith("Gemini permanently blocked"):
+            message = "AI 服務設定有誤，請檢查設定。"
+        elif "videos are pending completion" in issue.message:
+            message = f"{details['youtube_pending']} 部影片待完成。"
+        elif "flashes await classification" in issue.message:
+            message = f"{details['classification_pending']} 則消息待整理。"
+        elif "owner allowlist" in issue.message:
+            message = "尚未設定管理者。"
+        elif "heartbeat is stale" in issue.message:
+            message = "較久未更新，請檢查監控。"
+        else:
+            message = "狀態資料無法讀取，請檢查服務。"
+        rows.append(f"• {escape(labels.get(issue.component, '服務'))}：{message}")
+    if len(issues) > 8:
+        rows.append(f"另有 {len(issues) - 8} 項問題待檢查。")
     return "\n".join(rows)
 
 

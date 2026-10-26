@@ -431,7 +431,7 @@ DISCARDED_TIERS = {"MEDIUM", "LOW"}
 def format_message(summary: str, tier: Optional[str] = None, *, source: str = "", url: str = "") -> str:
     parts = []
     if tier in TIER_BADGES:
-        parts.append(tier)
+        parts.append("<b>重大消息</b>")
     if summary:
         parts.append(normalize_summary(summary))
     if source:

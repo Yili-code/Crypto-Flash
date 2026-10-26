@@ -144,8 +144,9 @@ def test_empty_context_does_not_generate_market_claims(tmp_path, monkeypatch):
     model = AsyncMock()
     monkeypatch.setattr(qa, "call_gemini", model)
     answer = asyncio.run(qa.ask_gemini_qa(None, "Daily bias?"))
-    assert "資料覆蓋不足" in answer
-    assert "目前不做推測" in answer
+    assert "沒有足夠資料" in answer
+    assert "暫不推測" in answer
+    assert len(answer) < 50
     model.assert_not_called()
 
 
@@ -153,3 +154,9 @@ def test_empty_context_does_not_generate_market_claims(tmp_path, monkeypatch):
 def test_missing_owner_allowlist_denies_privileged_access(monkeypatch, user_id):
     monkeypatch.setattr(qa, "OWNER_USER_IDS", set())
     assert not qa.sender_is_authorized(user_id)
+
+
+def test_qa_prompt_does_not_force_a_template_for_simple_questions():
+    assert "one to three short sentences" in qa.QA_PROMPT
+    assert "Do not force section headings" in qa.QA_PROMPT
+    assert "Preserve essential uncertainty and conditions" in qa.QA_PROMPT

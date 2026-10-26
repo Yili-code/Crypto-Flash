@@ -113,21 +113,9 @@ QA_PROMPT = """You are Heimdall, an elite AI advisor to Sir, specializing in cry
 5. Only use HTML tags <b>...</b>, <i>...</i>, and <code>...</code>. Do not use any other HTML tags or Markdown (for example, ** or #).
 6. Answer the exact question in the first sentence. Do not merely restate headlines or give generic background. If the records cannot answer it, say so directly in the first sentence.
 7. Preserve actor-action-object attribution. An action by US, Trump, a market, or another counterparty is NOT an action by Iran merely because Iran is mentioned or affected. Never convert a proposal, reported intention, negotiation position, forecast, or reaction into a completed action.
-8. Use this compact decision-support structure for a narrow mobile Telegram bubble:
-   <b>結論</b>
-   One direct sentence, preferably no more than 70 Chinese characters.
-
-   <b>已確認</b>
-   Up to three relevant facts. Start each fact with • and name who did what.
-   Put its source and full UTC+8 timestamp on a separate line below the fact, using <i>source · YYYY-MM-DD HH:MM UTC+8</i>. Only cite supplied metadata; never invent a source. Leave one blank line between facts. Omit unrelated records.
-
-   <b>市場含義</b>
-   One short causal chain tied to the confirmed facts; label conditional analysis explicitly. Prefer familiar Chinese phrasing except for the terms required by rule 3.
-
-   <b>接下來看</b>
-   One or two short observable signals, each on its own line starting with •, that would confirm or invalidate the assessment. Do not claim Heimdall will monitor them proactively.
-   Put every heading on its own line without a colon, with one blank line between sections. Use actual newlines, never <br>. Bold only headings and at most one key phrase in the conclusion; never bold entire paragraphs. Keep each fact to one short sentence and aim for 250–350 Chinese characters of prose, excluding citation metadata. Preserve essential uncertainty even if this requires more text.
-9. Separate recorded facts from inference. Never claim the supplied records are exhaustive. Respect the Coverage line: if it says recent-news window, state that it is not necessarily the whole day's news. General knowledge may explain conditional scenarios, but cannot establish current policy, prices, technical patterns, or today's Bullish/Bearish bias. Do not invent current market conditions.
+8. Match the response length to the question. For a simple factual question, answer in one to three short sentences with a compact source attribution. For an explanation, start with the answer, then add up to three short bullets only if useful. Aim for 80–180 Chinese characters unless the user explicitly requests detail. Do not force section headings such as 結論、已確認、市場含義、接下來看. Include market implications or next signals only when the question calls for them and the records support them. Preserve essential uncertainty and conditions rather than cutting them to meet a length target.
+   Cite supplied source names once, at the end or beside the relevant fact; add an HH:MM or date only when timing changes the interpretation. Never invent source metadata. Use actual newlines, never <br>. Do not repeat the same point as a conclusion, fact, and implication.
+9. Separate recorded facts from inference. Never claim the supplied records are exhaustive. Respect the Coverage line when reasoning about time windows. Mention limited coverage briefly only when it prevents answering the question or could change the conclusion, rather than appending a routine disclaimer. General knowledge may explain conditional scenarios, but cannot establish current policy, prices, technical patterns, or today's Bullish/Bearish bias. Do not invent current market conditions.
 10. If there is no confirmed action by the entity asked about, explicitly say "目前保存資料未確認" and identify what the records actually establish. Do not pad the answer to sound complete.
 11. Your name is Heimdall; always use that name when referring to yourself.
 12. Output only the final message to send to Sir. Do not output JSON or add any prefix or explanation.
@@ -137,7 +125,7 @@ QA_PROMPT = """You are Heimdall, an elite AI advisor to Sir, specializing in cry
 async def ask_gemini_qa(session: aiohttp.ClientSession, question: str) -> Optional[str]:
     context = build_context_snippet(question=question)
     if context == "(There is no recent flash-news record at the moment)":
-        return "目前保存資料未確認可回答這個問題的紀錄。這不代表事件沒有發生，而是 Heimdall 的資料覆蓋不足；目前不做推測。"
+        return "目前沒有足夠資料回答這個問題，暫不推測。"
     prompt = QA_PROMPT.format(context=context, question=question)
     return await call_gemini(session, prompt, timeout=30)
 
@@ -195,7 +183,7 @@ async def build_reply(session: aiohttp.ClientSession, text: str, bot_username: s
         return None
     log.info("Received Q&A request: %s", question[:60])
     if not GEMINI_API_KEY:
-        return "Gemini 尚未設定，暫時無法分析。你仍可使用 /news、/search、/important 與 /status。"
+        return "暫時無法分析，可先用 /news 或 /important 查看新聞。"
     return await ask_gemini_qa(session, question) or "暫時無法產生回答，請稍後重試。可先用 /news 查閱近期快訊。"
 
 

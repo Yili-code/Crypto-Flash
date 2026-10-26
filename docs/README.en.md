@@ -445,3 +445,6 @@ A Gemini request returning 404 triggers a model availability check. Only a model
 
 
 A model catalog entry does not guarantee generation access for new projects. An explicit provider response that a model is no longer available to new users blocks automatic retries until an authorized, usable configuration is provided. Catalog or pricing listings alone are not recovery evidence.
+
+
+Heimdall keeps ordinary replies focused on content: news and tracking retain time, attribution, and key information while hiding internal tiers, displayed-result counts, timezone labels, and processing details. /status shows recent item count and the latest update. Digests warn briefly only when messages were actually omitted. Q&A length follows the question rather than forcing a multi-section template. Missing data, failures, and material uncertainty stay explicit; /health shows actionable issues; full technical diagnostics remain available from the command line.

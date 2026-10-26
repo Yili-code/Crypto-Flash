@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from html import escape, unescape
 
-from common import CONTEXT_MAX_AGE_SEC, TIER_LEVELS, load_recent_news
+from common import CONTEXT_MAX_AGE_SEC, load_recent_news
 from daily_digest import DigestUnavailable, FAILURE_NOTICE, build_digest, previous_day
 from news_archive import load_archive
 from operational_health import render_health_html
@@ -15,14 +15,12 @@ DISPLAY_TZ = timezone(timedelta(hours=8))
 MAX_RESULTS = 10
 MESSAGE_BUDGET = 3500
 HELP_INDEX = """<b>Crypto Flash 指令</b>
-選擇分類查看完整語法：
+選擇分類：
 
 /help news — 新聞查詢
 /help digest — 每日重點
 /help track — 事件追蹤
-/help ask — AI 分析
-
-查詢使用已保存的新聞資料，時間為 UTC+8。"""
+/help ask — AI 分析"""
 
 HELP_TOPICS = {
     "news": """<b>新聞查詢</b>
@@ -30,12 +28,12 @@ HELP_TOPICS = {
 /news 10 — 最近 10 則（最多 10 則）
 /search BTC — 搜尋標題與內文，不分大小寫
 /search spot ETF — 搜尋完整詞組
-/important — 查看 HIGH、CRITICAL 快訊摘要
+/important — 重要快訊摘要
 /important 10 — 最多顯示 10 則重要快訊
-/status — 查看新聞資料筆數與新鮮度
-/health — 查看各 pipeline 的持久化健康狀態
+/status — 新聞更新狀態
+/health — 服務健康檢查
 
-/news、/search 顯示來源摘錄；/important 顯示已保存的 AI 摘要，查詢時不需重新生成。""",
+/news、/search 查新聞；/important 看整理後的重點。""",
     "digest": """<b>每日重點</b>
 /digest — 昨日 AI 重點，30 秒掌握大事
 /digest today — 今日截至目前的重點
@@ -48,7 +46,7 @@ HELP_TOPICS = {
 /updates BTC — 只讀指定主題的新增進展
 /untrack BTC — 停止追蹤""",
     "ask": """<b>AI 分析</b>
-/ask 問題 — 交給 Gemini 分析
+/ask 問題 — 提問
 
 例如：/ask 最近有哪些重要消息？
 分析只使用已保存的新聞背景，不會即時搜尋網路。""",
@@ -91,23 +89,22 @@ def _clip(text: str, limit: int) -> str:
 
 def _render_results(items: list[dict], heading: str, limit: int) -> str:
     if not items:
-        return f"<b>{escape(heading)}</b>\n目前保存的近期新聞中沒有符合條件的資料。"
+        return f"<b>{escape(heading)}</b>\n目前沒有符合的新聞。"
     rows = []
     for item in items[:limit]:
         clock = datetime.fromtimestamp(item["ts"], DISPLAY_TZ).strftime("%m/%d %H:%M")
-        tier = item["tier"] if item["tier"] in TIER_LEVELS else "未分級"
         source = str(item.get("source") or "Jin10").strip()
         title = item["title"] or item["content"]
-        row = f"{clock} · {tier} · {escape(_clip(source, 40))}\n<b>{escape(_clip(title, 100))}</b>"
+        row = f"<b>{escape(_clip(title, 100))}</b>\n{clock} · {escape(_clip(source, 40))}"
         if item["title"] and item["content"] and item["content"] != item["title"]:
-            row += "\n" + escape(_clip(item["content"], 160))
+            row += "\n" + escape(_clip(item["content"], 120))
         # Keep complete rows and HTML entities; reserve room for the heading/footer.
         if sum(len(part.encode("utf-16-le")) // 2 for part in rows + [row]) > MESSAGE_BUDGET - 700:
             break
         rows.append(row)
     return (
         f"<b>{escape(heading)}</b>\n"
-        f"顯示 {len(rows)} / {len(items)} 則 · UTC+8 · 來源摘錄\n\n"
+        "\n"
         + "\n\n".join(rows)
     )
 
@@ -115,7 +112,7 @@ def _render_results(items: list[dict], heading: str, limit: int) -> str:
 def _render_important(items: list[dict], limit: int) -> str:
     heading = "<b>重要快訊摘要</b>"
     if not items:
-        return heading + "\n目前保存的近期新聞中沒有符合條件的資料。"
+        return heading + "\n目前沒有符合的新聞。"
     # Older recent-context files omitted summaries; recover only exact matching records.
     archived = {(it["ts"], it.get("title", ""), it.get("content", "")): it for it in load_archive()}
     rows = []
@@ -137,12 +134,12 @@ def _render_important(items: list[dict], limit: int) -> str:
         seen.add(plain)
         clock = datetime.fromtimestamp(item["ts"], DISPLAY_TZ).strftime("%m/%d %H:%M")
         source_name = str(item.get("source") or "Jin10").strip()
-        row = f"<b>{item['tier']} · {clock} · {escape(_clip(source_name, 40))}</b>\n{escape(_clip(plain, 600))}"
+        row = f"{clock} · {escape(_clip(source_name, 40))}\n{escape(_clip(plain, 280))}"
         if len(rows) < limit and sum(len(part.encode("utf-16-le")) // 2 for part in rows + [row]) <= MESSAGE_BUDGET - 500:
             rows.append(row)
     body = "\n\n".join(rows) if rows else "目前沒有可用的已整理摘要。"
-    footer = f"\n\n另有 {missing} 則重要快訊尚無摘要，未列出原文。" if missing else ""
-    return heading + f"\n顯示 {len(rows)} 則 · UTC+8 · 已保存的 AI 摘要節錄\n\n" + body + footer
+    footer = "\n\n部分重要消息尚未整理。" if missing else ""
+    return heading + "\n\n" + body + footer
 
 
 def local_command_reply(text: str, bot_username: str) -> str | None:
@@ -173,22 +170,12 @@ def local_command_reply(text: str, bot_username: str) -> str | None:
         return "用法：/health（不需要參數）。" if args else render_health_html()
     items = _recent_items()
     if name == "status":
-        counts = {tier: sum(item["tier"] == tier for item in items) for tier in TIER_LEVELS}
         latest = "尚無近期資料"
         if items:
             stamp = datetime.fromtimestamp(items[0]["ts"], DISPLAY_TZ).strftime("%m/%d %H:%M")
             age = max(0, int((time.time() - items[0]["ts"]) // 60))
-            latest = f"{stamp} UTC+8（{age} 分鐘前）"
-        distribution = " · ".join(f"{tier} {count}" for tier, count in counts.items())
-        sources = sorted({str(item.get("source") or "Jin10").strip() for item in items})
-        source_text = "、".join(sources) if sources else "尚無資料"
-        unknown = len(items) - sum(counts.values())
-        return (
-            f"<b>新聞資料狀態</b>\n保存範圍：最近 {CONTEXT_MAX_AGE_SEC / 3600:g} 小時\n"
-            f"可查詢：{len(items)} 則\n最新紀錄：{latest}\n"
-            f"{distribution}\n未分級 {unknown}\n來源：{escape(source_text)}\n\n"
-            "以上反映本次問答服務可讀取的新聞資料，不代表監控器或 Gemini 的即時連線狀態。"
-        )
+            latest = f"{stamp}（{age} 分鐘前）"
+        return f"<b>新聞更新</b>\n最近 {CONTEXT_MAX_AGE_SEC / 3600:g} 小時：{len(items)} 則\n最新：{latest}"
     if name == "search":
         query = args.casefold()
         items = [item for item in items if query in f"{item['title']} {item['content']}".casefold()]

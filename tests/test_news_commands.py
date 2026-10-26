@@ -24,7 +24,8 @@ def news(monkeypatch):
 
 def test_news_is_sorted_by_time_and_respects_limit(news):
     reply = nc.local_command_reply("/news 2", "bot")
-    assert "顯示 2 / 4" in reply
+    assert reply.count("<b>") == 3
+    assert "UTC+8" not in reply and "來源摘錄" not in reply
     assert reply.index("Latest ETH") < reply.index("Unclassified")
     assert "Older BTC" not in reply
 
@@ -50,7 +51,7 @@ def test_important_recovers_legacy_summary_and_never_falls_back_to_raw(news, mon
     monkeypatch.setattr(nc, "load_archive", lambda: [archived])
     reply = nc.local_command_reply("/important@bot", "bot")
     assert "Archive summary" in reply
-    assert "1 則重要快訊尚無摘要" in reply
+    assert "部分重要消息尚未整理" in reply
     assert "BTC liquidity" not in reply and "Spot ETF inflows" not in reply
 
 
@@ -60,7 +61,8 @@ def test_important_summary_limit_and_html_budget(news):
     reply = nc.local_command_reply("/important 10", "bot")
     assert len(reply.encode("utf-16-le")) // 2 < 4096
     assert "&amp;" in reply and "raw body" not in reply
-    assert "顯示 1 則" in nc.local_command_reply("/important 1", "bot")
+    assert "Summary 0" in nc.local_command_reply("/important 1", "bot")
+    assert "Summary 1" not in nc.local_command_reply("/important 1", "bot")
 
 
 def test_important_without_any_summary_is_explicit(news, monkeypatch):
@@ -69,7 +71,7 @@ def test_important_without_any_summary_is_explicit(news, monkeypatch):
     monkeypatch.setattr(nc, "load_archive", lambda: [])
     reply = nc.local_command_reply("/important", "bot")
     assert "目前沒有可用的已整理摘要" in reply
-    assert "2 則重要快訊尚無摘要" in reply
+    assert "部分重要消息尚未整理" in reply
 
 
 @pytest.mark.parametrize("text", ["/news 0", "/news -1", "/news 11", "/news abc", "/news 1 2", "/search", "/status x"])
@@ -86,9 +88,10 @@ def test_mentions_do_not_route_other_bots(news):
 
 def test_status_reports_snapshot_not_connection_health(news):
     reply = nc.local_command_reply("/status", "bot")
-    assert "可查詢：4 則" in reply
-    assert "未分級 1" in reply
-    assert "不代表" in reply and "UTC+8" in reply
+    assert "最近 6 小時：4 則" in reply
+    assert "最新：" in reply
+    assert len(reply.splitlines()) == 3
+    assert "連線正常" not in reply and "HIGH" not in reply
 
 
 def test_help_uses_two_level_command_discovery():
@@ -195,3 +198,11 @@ def test_listener_keeps_chat_restriction_for_new_commands(news, monkeypatch):
     sender.assert_awaited_once()
     assert sender.call_args.args[1] == "allowed"
     assert sender.call_args.kwargs["reply_to"] == 42
+
+
+def test_news_and_important_keep_sources_without_internal_metadata(news):
+    for command in ("/news", "/important"):
+        reply = nc.local_command_reply(command, "bot")
+        assert "Jin10" in reply
+        for noise in ("UTC+8", "CRITICAL", "HIGH", "未分級", "顯示", "已保存的 AI", "來源摘錄"):
+            assert noise not in reply

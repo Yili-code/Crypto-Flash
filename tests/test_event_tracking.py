@@ -1,4 +1,5 @@
 import asyncio
+import re
 import json
 from unittest.mock import AsyncMock
 
@@ -40,7 +41,7 @@ def test_updates_start_at_subscription_and_ack_only_after_delivery(tracking):
     assert "BTC fresh" in reply.text and "BTC previous" not in reply.text
     assert et.event_command_reply("updates", "").text == reply.text
     et.acknowledge_updates(reply)
-    assert "沒有尚未" in et.event_command_reply("updates", "").text
+    assert "沒有新進展" in et.event_command_reply("updates", "").text
     tracking.append(news("next", 1002, "BTC follow-up"))
     assert "BTC follow-up" in et.event_command_reply("updates", "").text
 
@@ -54,7 +55,7 @@ def test_same_timestamp_backlog_can_be_read_without_gaps(tracking):
         displayed.extend(line for line in reply.text.splitlines() if line.startswith("BTC event"))
         et.acknowledge_updates(reply)
     assert len(displayed) == len(set(displayed)) == 20
-    assert "沒有尚未" in et.event_command_reply("updates", "").text
+    assert "沒有新進展" in et.event_command_reply("updates", "").text
 
 
 def test_overlapping_topics_show_one_event_and_advance_both(tracking):
@@ -65,7 +66,7 @@ def test_overlapping_topics_show_one_event_and_advance_both(tracking):
     assert reply.text.count("BTC ETF approved") == 1
     assert set(reply.progress) == {"btc", "etf"}
     et.acknowledge_updates(reply)
-    assert "沒有尚未" in et.event_command_reply("updates", "ETF").text
+    assert "沒有新進展" in et.event_command_reply("updates", "ETF").text
 
 
 def test_selected_topic_does_not_consume_other_topics(tracking):
@@ -83,7 +84,8 @@ def test_timeline_shows_history_without_consuming_progress(tracking):
     tracking.extend([news("older", 999, "BTC old"), news("newer", 1001, "BTC new")])
     reply = et.event_command_reply("timeline", "btc")
     assert reply.text.index("BTC old") < reply.text.index("BTC new")
-    assert "來源摘錄" in reply.text
+    assert "BTC old" in reply.text
+    assert "UTC+8" not in reply.text and "HIGH" not in reply.text
     assert not reply.progress
     assert "BTC new" in et.event_command_reply("updates", "").text
 
@@ -93,14 +95,14 @@ def test_timeline_shows_latest_eight_in_chronological_order(tracking):
     reply = et.event_command_reply("timeline", "BTC").text
     assert "BTC number 06" not in reply
     assert reply.index("BTC number 07") < reply.index("BTC number 14")
-    assert "8 / 15" in reply
+    assert reply.count("BTC number") == 8
 
 
 def test_matching_includes_saved_summary_and_normalizes_phrases(tracking):
     et.event_command_reply("track", "spot ETF")
     tracking.append(news("one", 1001, "Other title", "<b>SPOT ETF</b> update"))
     reply = et.event_command_reply("updates", "")
-    assert "SPOT ETF update" in reply.text and "摘要節錄" in reply.text
+    assert "SPOT ETF update" in reply.text and "摘要節錄" not in reply.text
     assert "新增 1 則" in et.event_command_reply("tracks", "").text
 
 
@@ -152,7 +154,7 @@ def test_results_fit_telegram_and_do_not_lose_overflow(tracking, pattern):
         assert reply.text.count("<b>") == reply.text.count("</b>")
         if not reply.progress:
             break
-        total += reply.text.count("摘要節錄")
+        total += len(re.findall(r"\d{2}/\d{2} \d{2}:\d{2}", reply.text))
         et.acknowledge_updates(reply)
     assert total == 12
 
@@ -199,3 +201,14 @@ def test_tracks_escape_keyword_and_do_not_mark_read(tracking):
     et.event_command_reply("track", "<ETF>")
     assert "&lt;ETF&gt;" in et.event_command_reply("tracks", "").text
     assert json.loads(et.EVENT_STATE_FILE.read_text())["topics"][0]["cursor"] == [1000.0, ""]
+
+
+def test_tracking_messages_keep_sources_and_only_actionable_guidance(tracking):
+    created = et.event_command_reply("track", "BTC").text
+    assert "/updates" in created
+    assert "完整詞組" not in created
+    tracking.append({**news("new", 1001, "BTC event"), "source": "Source <&>"})
+    reply = et.event_command_reply("updates", "BTC").text
+    assert "Source &lt;&amp;&gt;" in reply and "BTC event" in reply
+    for noise in ("HIGH", "UTC+8", "來源摘錄", "摘要節錄", "本次顯示"):
+        assert noise not in reply

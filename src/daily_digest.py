@@ -81,7 +81,7 @@ def render_summary(raw: str, source_ids: set[int]) -> str:
         if not isinstance(points, list) or not 1 <= len(points) <= 3:
             raise ValueError("points must contain 1 to 3 items")
         visible = "今日主軸：" + overview
-        rows = [f"<b>今日主軸：{escape(overview)}</b>"]
+        rows = [f"<b>{escape(overview)}</b>"]
         titles = set()
         for point in points:
             if not isinstance(point, dict):
@@ -97,7 +97,7 @@ def render_summary(raw: str, source_ids: set[int]) -> str:
             rows.append(f"• <b>{escape(title)}</b>\n{escape(detail)}")
         if watch:
             visible += "後續焦點：" + watch
-            rows.append(f"<b>後續焦點：</b>{escape(watch)}")
+            rows.append(f"留意：{escape(watch)}")
         if len(visible) > 250:
             raise ValueError("visible digest exceeds 250 characters")
         return "\n\n".join(rows)
@@ -109,9 +109,9 @@ def render_summary(raw: str, source_ids: set[int]) -> str:
 async def build_digest(session, day: date, *, usage_scope="live") -> str:
     start = datetime.combine(day, datetime.min.time(), DISPLAY_TZ).timestamp()
     items = [item for item in load_archive() if start <= item["ts"] < start + 86400]
-    heading = f"<b>每日重點｜{day.isoformat()}</b> · 30 秒掌握大事\n\n"
+    heading = f"<b>每日重點｜{day.isoformat()}</b>\n\n"
     if not items:
-        return heading + "沒有可用的新聞紀錄。可能尚未累積資料或監控中斷，並不代表當天沒有重要事件。"
+        return heading + "目前沒有可整理的新聞紀錄，不代表當天沒有重要事件。"
     candidates = [item for item in items
                   if item.get("tier") in ("CRITICAL", "HIGH")
                   and item.get("relevant") is not False
@@ -134,11 +134,9 @@ async def build_digest(session, day: date, *, usage_scope="live") -> str:
         sources.append(source)
         size += length
     ungraded = sum(item.get("tier") not in TIER_RANK for item in items)
-    footer = f"\n\n資料涵蓋有限：未分級 {ungraded} 則；依 UTC+8 收錄日期，不保證全天完整。"
-    if omitted:
-        footer += f"另有 {omitted} 則摘要因篇幅未納入。"
+    footer = "\n\n部分消息未納入，內容可能不完整。" if ungraded or omitted else ""
     if not sources:
-        return heading + "沒有可整理的已摘要重要快訊；不代表當天沒有重要事件。" + footer
+        return heading + "目前沒有可整理的重點，不代表當天沒有重要事件。" + footer
     prompt = json.dumps({"date": day.isoformat(), "sources": sources}, ensure_ascii=False)
     source_ids = {source["id"] for source in sources}
     validation_error = None

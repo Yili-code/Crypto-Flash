@@ -82,14 +82,15 @@ def test_daily_digest_uses_taipei_calendar_and_importance(daily_items, model):
     reply = asyncio.run(dd.build_digest(None, day))
     payload = json.loads(model.call_args.args[1])
     assert [s["summary"] for s in payload["sources"]] == ["Critical event", "First event"]
-    assert "30 秒掌握大事" in reply and "Fed 發言" in reply
-    assert "未分級 1" in reply and "不保證全天完整" in reply
+    assert day.isoformat() in reply and "Fed 發言" in reply
+    assert "部分消息未納入，內容可能不完整" in reply
+    assert "未分級" not in reply and "UTC+8" not in reply
     assert "HIGH" not in reply and "Critical event" not in reply
 
 
 def test_empty_archive_explains_missing_coverage(monkeypatch, model):
     monkeypatch.setattr(dd, "load_archive", lambda: [])
-    assert "並不代表" in asyncio.run(dd.build_digest(None, date(2026, 9, 8)))
+    assert "不代表當天沒有重要事件" in asyncio.run(dd.build_digest(None, date(2026, 9, 8)))
     model.assert_not_awaited()
 
 
@@ -234,3 +235,12 @@ def test_scheduled_delivery_routes_digest_scope(tmp_path, monkeypatch):
     monkeypatch.setattr(dd, "send_telegram_message", AsyncMock(return_value=True))
     asyncio.run(dd.main())
     assert builder.call_args.kwargs == {"usage_scope": "digest"}
+
+
+def test_complete_digest_omits_routine_processing_disclaimers(daily_items, model):
+    day, items = daily_items
+    items[:] = [items[0]]
+    reply = asyncio.run(dd.build_digest(None, day))
+    assert "Fed 發言" in reply
+    for noise in ("資料涵蓋", "未分級", "UTC+8", "30 秒", "今日主軸", "不完整"):
+        assert noise not in reply
