@@ -210,3 +210,22 @@ def test_error_bodies_are_not_logged_or_saved(clock, caplog):
     call(session)
     assert secret not in caplog.text
     assert secret not in policy.state_path('youtube').read_text()
+
+
+def test_quota_diagnostics_excludes_messages_and_identifiers():
+    data = {"error": {"message": "private-key private-project private-prompt", "details": [
+        {"@type": "google.rpc.QuotaFailure", "violations": [{
+            "quotaMetric": "generativelanguage.googleapis.com/generate_requests",
+            "quotaId": "GenerateRequestsPerMinute", "quotaValue": "0",
+            "subject": "private-project", "description": "private-prompt",
+            "quotaDimensions": {"project": "private-project"},
+        }]},
+    ]}}
+    assert policy.quota_diagnostics(data) == [{
+        "quotaMetric": "generativelanguage.googleapis.com/generate_requests",
+        "quotaId": "GenerateRequestsPerMinute", "quotaValue": "0",
+    }]
+    assert policy.quota_diagnostics({"error": {"details": None}}) == []
+    assert policy.quota_diagnostics({"error": {"details": [{
+        "@type": "google.rpc.QuotaFailure", "violations": "malformed",
+    }]}}) == []

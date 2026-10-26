@@ -430,3 +430,6 @@ The Telegram menu lists one-tap commands: /news, /important, /digest, /tracks, /
 
 
 The shared Telegram sender converts visible Chinese prose to Taiwan Traditional Chinese, including /news and /search excerpts and AI replies. English is not translated; HTML, URLs, and code/pre contents are preserved. Stored source data and topic matching remain unchanged, with no extra AI requests. Previously delivered messages are not edited.
+
+
+Gemini 429 logs include the operation, model, retry hint, and quota metrics/limits, excluding raw error messages, prompts, and project identifiers.

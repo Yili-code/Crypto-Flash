@@ -112,6 +112,11 @@ async def _call_gemini(
                                                   getattr(resp, "headers", {}))
                 policy.failed(usage_scope, category, request_id, delay)
                 log.warning("Gemini [%s] HTTP %s: %s", usage_scope, resp.status, category)
+                if resp.status == 429:
+                    operation = "search" if google_search else "video" if extra_parts else "text"
+                    log.warning("Gemini quota operation=%s model=%s retry_seconds=%s limits=%s",
+                                operation, GEMINI_MODEL, delay,
+                                policy.quota_diagnostics(error_data) if isinstance(error_data, dict) else [])
                 return None
             
             data = await resp.json()

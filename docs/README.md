@@ -436,3 +436,6 @@ Telegram menu 僅列出可直接執行的 /news、/important、/digest、/tracks
 
 
 所有共用 Telegram 發送流程會將可見中文轉為臺灣繁體字形，包含 /news、/search 的來源摘錄與 AI 回覆。英文不翻譯；HTML、網址與 code/pre 內容保留。原始新聞與追蹤比對不變，不增加 AI 呼叫；已送出的舊訊息不會回溯修改。
+
+
+Gemini 429 日誌會記錄請求類型、模型、重試提示與配額指標／限制，排除原始錯誤訊息、prompt 與專案識別碼。

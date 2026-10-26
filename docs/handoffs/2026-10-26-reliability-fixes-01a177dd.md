@@ -7,3 +7,5 @@
 證據：Bankless 舊 UCAI9... HTTP404，正確 UCAl9... HTTP200，Atom title=Bankless。本機 Telegram 設定仍是 Test group，非 production，僅用 getChatAdministrators 核對 creator 名字與既有 YiLi 身分；不把本機群組狀態當 production。
 狀態：實作中。owner ID 不寫入 repo/log。
 commit/push/deploy：待完成；所有外部操作另記驗證結果。
+
+階段：Bankless 修正 821ca33 已推送；安全 quota 診斷實作完成，33 項相關測試與 Ruff 通過，準備正式 YouTube 執行核對真正的 429 metric。

@@ -167,3 +167,30 @@ def succeeded(scope: str) -> None:
     state = read_state(scope)
     state.update(failures=0, retry_at=0, last_error="")
     write_state(scope, state)
+
+
+def quota_diagnostics(data: dict) -> list[dict]:
+    """Return only provider quota identifiers and limits, never raw error messages."""
+    error = data.get("error")
+    if not isinstance(error, dict) or not isinstance(error.get("details"), list):
+        return []
+    result = []
+    for detail in error["details"]:
+        if not isinstance(detail, dict) or not str(detail.get("@type", "")).endswith("QuotaFailure"):
+            continue
+        violations = detail.get("violations")
+        if not isinstance(violations, list):
+            continue
+        for violation in violations[:10]:
+            if not isinstance(violation, dict):
+                continue
+            row = {}
+            for key in ("quotaMetric", "quotaId", "quotaValue"):
+                value = violation.get(key)
+                if isinstance(value, (str, int)) and len(str(value)) <= 160:
+                    value = str(value)
+                    if all(c.isalnum() or c in "._/-" for c in value):
+                        row[key] = value
+            if row:
+                result.append(row)
+    return result[:10]
