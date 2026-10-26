@@ -9,4 +9,4 @@
 已驗證：352 項完整離線測試與 Ruff 通過；九個新增測試案例涵蓋截圖字形、數值、英文、HTML attributes、URLs、entities、code/pre、兩個 bot 與 400 retry。
 完整 suite 同時發現 menu 模組捕捉本機 token 讓其他 listener 測試碰到新網路入口，conftest 統一將 menu token 設空以隔離，menu 專屬測試另注入假值。
 限制：詞義與內容不重新分析；code/pre 與 URL 原樣保留；舊 Telegram 訊息不回溯修改。未部署，目前 running workflow 仍是舊版本。
-commit/push：準備提交推送；之後確認 GitHub CI。
+commit/push：9c6e02a 已推送 origin/main；GitHub CI run 40314888616 成功：https://github.com/Yili-code/Crypto-Flash/actions/runs/40314888616 。目前未部署新版本。
