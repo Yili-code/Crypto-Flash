@@ -1,1 +1,1 @@
-{"day": "2026-10-27", "used": 1, "config": "916340a2626d86865ccd45111be6a467ed3027fd896d3c7da6267929a997bd1f", "failures": 1, "retry_at": 1793037471.4843607, "last_error": "rate_limit", "blocked": false, "rejected": []}
+{"day": "2026-10-27", "used": 3, "config": "916340a2626d86865ccd45111be6a467ed3027fd896d3c7da6267929a997bd1f", "failures": 1, "retry_at": 1793053013.7916813, "last_error": "rate_limit", "blocked": false, "rejected": []}
