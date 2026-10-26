@@ -1,0 +1,39 @@
+name: Gemini model availability check
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Read available model names
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GEMINI_SEARCH_MODEL: ${{ vars.GEMINI_SEARCH_MODEL }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          
+          url = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
+          request = urllib.request.Request(url, headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              data = json.load(response)
+          models = sorted(model["name"].removeprefix("models/") for model in data.get("models", [])
+                          if "generateContent" in model.get("supportedGenerationMethods", []))
+          print("Available generation models:")
+          for model in models:
+              print(model)
+          for name in (os.environ.get("GEMINI_MODEL", "") or "gemini-3.5-flash-lite",
+                       os.environ.get("GEMINI_SEARCH_MODEL", "") or "gemini-3.5-flash-lite"):
+              print("Configured model available:", name, name in models)
+          if data.get("nextPageToken"):
+              raise SystemExit("Catalog pagination required; availability result is incomplete")
+          PY
