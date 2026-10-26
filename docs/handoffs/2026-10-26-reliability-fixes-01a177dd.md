@@ -16,3 +16,14 @@ Owner：已依唯一匹配的 creator 名字/username 核對使用者，將 ID �
 已準備可選 GEMINI_SEARCH_MODEL（預設主模型，不偷偷切換）；單獨搜尋路由保留 grounding/引文校驗與每日計數，待驗證。
 自動審查拒絕 key lookup URL 查法（含金鑰 query）；未執行、未繞過，改以 AI Studio 可見 UI 查證。
 Owner fail-closed 已推送 3e238f1，先前 357 項完整測試/Ruff 通過；正在安全重啟常駐服務使 secret 生效。
+
+## 已驗證階段結果（2026-10-26 20:00 Asia/Taipei）
+- Bankless 修正後連網複查六個 YouTube RSS 均 HTTP200；五個新聞 RSS 與日曆抓取均成功。
+- Owner fail-closed + secret 已部署：run 40318803031 / job 121559598328，head 3f2329b；setup/dependencies success，正式服務 in_progress。此前排隊數分鐘，受控重排檢查時已自行進入 running，因此沒有 cancel/重複 dispatch。
+- Unigram 真實 /health 在20:00成功回覆 YiLi，Critical0/Warning1；owner allowlist warning 已消失，僅剩 YouTube pending162。非 owner/空 allowlist 拒絕由離線測試驗證，未借用他人帳號。
+- 全套362項測試通過（4.91s）、Ruff通過；GitHub CI 40318742086 成功。
+- 429正式證據：operation=search，gemini-3.5-flash-lite；Google官方定價免費API不支援Search grounding，並非一般重試可解。官方來源 https://ai.google.dev/gemini-api/docs/pricing#gemini-3.5-flash-lite 。
+- 可選 GEMINI_SEARCH_MODEL 路由已完成並部署（空值仍主模型），影片摘要維持主模型、grounding引用驗證與當日計數保留。尚未設定新值，等待使用者選擇「只查證改2.5 Flash-Lite免費」或「3.5開付費」。未更換模型、未開billing、未關查證、未清除配額。
+- 未完成：YouTube 完整摘要+查證送達需上述模型/帳務選擇，不能宣稱全部問題已修復。162 pending 未刪除或假標完成。
+下一步：收到明確選擇後設定 GitHub GEMINI_SEARCH_MODEL 或由使用者完成billing，再執行一次正式YT驗證至實際送達、檢查續傳與pending變化；依新變更跑相應測試。
+commit/push：821ca33來源修復、774f89f安全診斷、3e238f1權限修復、fac3020範例修正、3f2329b可選搜尋路由均已推送；本紀錄另提交保存結果。
