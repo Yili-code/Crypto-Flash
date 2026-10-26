@@ -159,3 +159,16 @@ def test_summary_is_cleaned_before_storage(monkeypatch):
     })))
     result = asyncio.run(jm.summarize_with_gemini(None, "synthetic news"))
     assert result["message"] == "<b>消息</b>\n事實。"
+
+
+@pytest.mark.parametrize("search_model", [None, "", "   "])
+def test_unconfigured_search_model_keeps_main_model(monkeypatch, search_model):
+    with monkeypatch.context() as patch:
+        patch.setenv("GEMINI_MODEL", "explicit-main-model")
+        if search_model is None:
+            patch.delenv("GEMINI_SEARCH_MODEL", raising=False)
+        else:
+            patch.setenv("GEMINI_SEARCH_MODEL", search_model)
+        importlib.reload(gemini)
+        assert gemini.GEMINI_SEARCH_MODEL == "explicit-main-model"
+    importlib.reload(gemini)

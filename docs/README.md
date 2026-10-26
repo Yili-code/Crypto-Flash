@@ -442,3 +442,6 @@ Gemini 429 日誌會記錄請求類型、模型、重試提示與配額指標／
 
 
 管理與付費指令採 fail-closed：TELEGRAM_OWNER_USER_IDS 未設定時拒絕執行；只有 allowlist 中的 Telegram user ID 可以使用 /ask、/digest、/health 與追蹤管理指令。一般新聞查詢仍依原聊天室限制提供。
+
+
+YouTube 可用 GEMINI_SEARCH_MODEL 明確指定 Google Search 查證專用模型；未設定時沿用 GEMINI_MODEL，影片摘要不切換。設定變更只重評估錯誤狀態，不清除當日請求計數。Gemini 3.5 Flash-Lite 的免費 API tier 不提供 Search grounding，需明確選擇支援的模型或啟用付費帳務。

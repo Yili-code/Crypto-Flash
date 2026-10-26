@@ -12,6 +12,8 @@ import gemini_policy as policy
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "").strip() or "gemini-3.5-flash-lite"
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+# Opt-in only: an empty setting preserves the existing model for every operation.
+GEMINI_SEARCH_MODEL = os.getenv("GEMINI_SEARCH_MODEL", "").strip() or GEMINI_MODEL
 
 log = get_logger("gemini")
 _scope_locks = {}
@@ -23,6 +25,7 @@ def current_config_id() -> str:
     value = ":".join((
         GEMINI_API_KEY,
         GEMINI_MODEL,
+        GEMINI_SEARCH_MODEL,
         os.getenv("GEMINI_POLICY_REVISION", ""),
         POLICY_IMPLEMENTATION_REVISION,
     ))
@@ -89,7 +92,11 @@ async def _call_gemini(
             "responseSchema": response_schema,
         }
 
-    request_id = policy.fingerprint(json.dumps(payload, sort_keys=True, ensure_ascii=False))
+    model = GEMINI_SEARCH_MODEL if google_search else GEMINI_MODEL
+    url = (f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+           if google_search else GEMINI_URL)
+    request_id = policy.fingerprint(json.dumps({"model": model, "payload": payload},
+                                                sort_keys=True, ensure_ascii=False))
     config_id = current_config_id()
     reason = policy.reserve(usage_scope, config_id, request_id)
     if reason:
@@ -98,7 +105,7 @@ async def _call_gemini(
 
     try:
         async with session.post(
-            GEMINI_URL,
+            url,
             headers=headers,
             json=payload,
             timeout=aiohttp.ClientTimeout(total=timeout),
@@ -115,7 +122,7 @@ async def _call_gemini(
                 if resp.status == 429:
                     operation = "search" if google_search else "video" if extra_parts else "text"
                     log.warning("Gemini quota operation=%s model=%s retry_seconds=%s limits=%s",
-                                operation, GEMINI_MODEL, delay,
+                                operation, model, delay,
                                 policy.quota_diagnostics(error_data) if isinstance(error_data, dict) else [])
                 return None
             

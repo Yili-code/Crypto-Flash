@@ -83,3 +83,37 @@ def test_partial_delivery_stays_unread(tmp_path, monkeypatch):
     asyncio.run(yt.process_channel(None, channel_cfg(), state))
     assert state == {'c': ['older']}
     assert send.await_count == 2
+
+
+def test_search_model_override_preserves_video_model_and_grounding(monkeypatch):
+    monkeypatch.setattr(gemini, "GEMINI_API_KEY", "test")
+    monkeypatch.setattr(gemini, "GEMINI_SEARCH_MODEL", "explicit-search-model")
+    candidate = {
+        "finishReason": "STOP", "content": {"parts": [{"text": "supported claim"}]},
+        "groundingMetadata": {
+            "groundingChunks": [{"web": {"uri": "https://example.org/source"}}],
+            "groundingSupports": [{"segment": {"text": "supported claim"}, "groundingChunkIndices": [0]}],
+        },
+    }
+    session = FakeSession([FakeResponse(200, json_data={"candidates": [candidate]}),
+                           FakeResponse(200, json_data={"candidates": [candidate]})])
+    assert asyncio.run(gemini.call_gemini(session, "verify", google_search=True, usage_scope="youtube"))
+    assert "/models/explicit-search-model:" in session.calls[0]["url"]
+    assert session.calls[0]["json"]["tools"] == [{"google_search": {}}]
+    assert asyncio.run(gemini.call_gemini(session, "summary", usage_scope="youtube",
+                                        extra_parts=[{"file_data": {"file_uri": "https://youtu.be/test"}}]))
+    assert session.calls[1]["url"] == gemini.GEMINI_URL
+    assert "tools" not in session.calls[1]["json"]
+
+
+def test_search_model_changes_config_without_resetting_used_requests(monkeypatch):
+    import gemini_policy as policy
+    monkeypatch.setattr(gemini, "GEMINI_API_KEY", "test")
+    before = gemini.current_config_id()
+    assert policy.reserve("youtube", before, "first") is None
+    policy.failed("youtube", "rate_limit", "first", 30)
+    monkeypatch.setattr(gemini, "GEMINI_SEARCH_MODEL", "explicit-search-model")
+    after = gemini.current_config_id()
+    assert after != before
+    assert policy.reserve("youtube", after, "second") is None
+    assert policy.read_state("youtube")["used"] == 2
