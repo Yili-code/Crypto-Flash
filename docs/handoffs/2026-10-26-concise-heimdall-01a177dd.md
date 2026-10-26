@@ -8,4 +8,4 @@
 已實作：news/search/important去除固定筆數、時區、內部分級與處理註記，保留時間/來源；重要摘要每筆上限由600改280字，來源摘錄160改120字；tracking清除冗長footer及內部分級但保留跨主題標籤與更多結果提示；daily digest移除固定宣傳/資料處理footer，只在實際漏入/未分級時短警告；QA改為簡單問答1–3句、解釋按需3點，80–180字目標且保留條件與不確定性；CRITICAL標籤改人類可理解的重大消息。/health以繁中顯示實際問題、critical仍優先，CLI完整診斷未改。
 已驗證：375項完整離線測試通過（5.04s），Ruff通過；測試含來源/HTML/字數、無資料/失敗、追蹤分頁ack、日報合格來源與實際省略警告、健康錯誤可見但不暴露內部路徑。格式預覽 .tmp/heimdall-message-preview.md 使用示例資料，無真實Telegram發送。
 模型設定：主模型與搜尋模型均為3.5 Flash-Lite，已實際讀回；免費grounding限制仍在，不因文字精簡宣稱YouTube修復。
-commit/push/deploy：準備提交推送並核對CI；本次文字修改尚未部署，依AGENTS部署需另獲授權。
+commit/push/deploy：8c63739已推送origin/main；GitHub CI40323041858成功（https://github.com/Yili-code/Crypto-Flash/actions/runs/40323041858）。本次文字修改尚未部署，依AGENTS第19行部署需另獲授權。模型variables已讀回皆3.5 Flash-Lite。下一步取得文字改版部署授權後，安全停止/保存舊服務狀態、啟動新版並實測精簡輸出。
