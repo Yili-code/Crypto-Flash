@@ -12,3 +12,5 @@ commit/push：待保存驗證結果。
 
 模型catalog run40320397547/job121563576036成功，正式key清單明列gemini-2.5-flash-lite與generateContent。因此更正：第一次請求404不能直接判定整個模型不可用。已回復原3.5搜尋設定，沒有啟用帳務或改摘要模型。
 新增404模型存在性確認（模型metadata GET200/網路不確定時退避，不永久封鎖；metadata404才配置封鎖），以政策實作revision3重新評估舊誤封鎖且保留當日used；新增YT單writer probe_search測試入口，使用原youtube配額並且不發Telegram。367項完整測試與Ruff通過，準備推送後重新套用使用者已同意的2.5並先probe。
+
+最小probe run40320856263/job121565127005仍HTTP404；metadata確認模型存在，現已分類provider_unavailable而非永久block。摘要模型保持3.5，搜尋為使用者同意的2.5；待取得固定公開probe的遮罩錯誤訊息。新增僅限固定公開prompt的trace診斷，32項相關測試/Ruff通過，不能用於私人prompt。
