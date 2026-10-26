@@ -17,3 +17,13 @@ commit/push：待保存驗證結果。
 
 確切根因：遮罩probe run40321203612/job121566287368，Google回覆This model models/gemini-2.5-flash-lite is no longer available to new users，建議3.5與Interactions API。並非catalog缺失，也不是一次暫時404。使用者同意的免費替代方案對目前API專案不可用，不能宣稱已修好。
 新增對明確新使用者不可用回覆的配置封鎖，避免metadata200造成無限退避重試；保留未知404的查核與退避。準備回復原3.5搜尋設定，摘要維持3.5，pending不丟棄。不開billing、不換未授權第三模型、不關grounding。新測試確認一次失敗後不再發請求。
+
+## 本輪最終可驗證狀態
+更新：2026-10-26（Asia/Taipei）。
+- 已回復並讀回GEMINI_SEARCH_MODEL=gemini-3.5-flash-lite；影片摘要亦維持原3.5。未啟用billing、未授權第三模型。
+- 根因證據run40321203612：2.5Flash-Lite在catalog存在，但Google明確拒絕新使用者生成；同意的免費方案未成功，不能稱部署成功或YT已恢復。
+- 修正commit615e0c2已推送；369項全套離線測試通過（5.05s）、Ruff通過；GitHub CI40321644594成功。
+- 原owner/Bankless修復仍保留，常駐服務不需為本次YT設定另重啟。pending影片未刪除或假標完成。新policy在下次YT workflow讀取新程式；本輪沒有為已知不支援免費grounding的原3.5再次浪費請求。
+- 尚未完成：真實YouTube查證與完整送達。進一步路徑需要使用者同意並親自啟用Google付費帳務，或另明確授權其他模型/查證方案；不能把一次失敗設定變更當成功完成。
+- 診斷workflow為手動唯讀、無狀態共寫；probe_search使用YT原workflow單一writer與日配額，沒有繞過錯誤/配額保護。
+commit/push：本紀錄另提交，任務等待上述必要使用者決策，不標記為全部修復。
