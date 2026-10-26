@@ -424,3 +424,6 @@ Flash quality: omit optional impact sections together with their headings when e
 ## Flash quality rules
 
 The grading prompt caps routine speech previews without actual remarks or new policy information at MEDIUM. Briefings use natural Traditional Chinese and include an optional market-impact section only when the source supports a specific transmission mechanism, with conditional inferences. Missing economic values and market reactions must not be invented. Spacing and common financial vocabulary are normalized. Every flash shows its source, linked when an HTTPS source URL is available. Classification and analysis remain model judgments; offline tests are not a live model quality evaluation.
+
+
+The Telegram menu lists one-tap commands: /news, /important, /digest, /tracks, /updates, /status, and /help. Parameterized commands remain available by typing them; see /help for syntax. The assistant refreshes the default menu at startup; a menu update failure does not stop the service.

@@ -173,6 +173,7 @@ def test_digest_uses_ai_through_assistant_and_reports_failure(monkeypatch):
 def test_listener_keeps_chat_restriction_for_new_commands(news, monkeypatch):
     monkeypatch.setattr(qa, "TELEGRAM_CHAT_ID", "allowed")
     monkeypatch.setattr(qa, "get_bot_username", AsyncMock(return_value="bot"))
+    monkeypatch.setattr(qa, "sync_command_menu", AsyncMock(return_value=True))
     sender = AsyncMock(return_value=True)
     monkeypatch.setattr(qa, "send_telegram_message", sender)
 

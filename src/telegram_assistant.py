@@ -19,6 +19,7 @@ from tg import (
     send_telegram_message,
 )
 import telegram_update_state as update_state
+from telegram_menu import sync_command_menu
 
 log = get_logger("jin10-qa")
 
@@ -214,6 +215,7 @@ def prepare_event_reply(text: str, bot_username: str) -> Optional[EventReply]:
 # ─── Main loop ─────────────────────────────────────────────────────────────────
 
 async def telegram_assistant_loop(session: aiohttp.ClientSession) -> None:
+    await sync_command_menu(session)
     bot_username = await get_bot_username(session)
     if bot_username:
         log.info("Telegram Assistant listener started. Bot username: @%s", bot_username)
