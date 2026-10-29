@@ -151,6 +151,11 @@ python -m pytest
 
 To report a reproducible problem or propose a focused change, open an [issue](https://github.com/Yili-code/Crypto-Flash/issues) and follow [CONTRIBUTING.md](CONTRIBUTING.md). Good first contributions include parser fixtures, failure-path tests, documentation corrections, and additional permitted RSS/Atom sources.
 
+
+## Open-source inclusion
+
+In October 2026, **Crypto Flash** was listed on the [XERJ Corpus Hub contributor page for Yili-code](https://hub.xerj.org/contributors/Yili-code). This is an external project listing and contribution acknowledgement, not a certification or award.
+
 ## License status
 
 Released under the [MIT License](LICENSE).
