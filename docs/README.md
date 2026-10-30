@@ -104,6 +104,8 @@ news_archive.json → 每日重點、事件時間線與追蹤進展
 
 `flash_service.py` 在同一個 runner 同時執行監控和問答，即時共用 `recent_news.json`。舊版分開執行的 Telegram Assistant workflow 必須停止，避免重複接收 Telegram updates。
 
+Actions 使用 `--run-seconds 21000`，由程式在 350 分鐘後主動取消並等待各元件收尾。外層 351 分鐘 watchdog 僅負責攔截卡住的結束流程，觸發時仍視為失敗；元件意外停止也不會被當成正常結束。後續健康檢查與狀態保存仍會執行。
+
 RSS/Atom 清單位於 `config/news_feeds.json`，只接受 HTTPS；可用 `python src/feed_monitor.py` 檢查目前各來源是否可達及可解析，不會更新已讀狀態或發送 Telegram。已讀狀態保存在 `data/feed_seen.json`，避免每六小時重啟 workflow 時重複處理同一篇文章。新增來源的第一次抓取只預熱現有文章，之後的新文章才會進入共用佇列。
 
 Gemini 啟動檢查或執行中的摘要請求失敗時，快訊監控會暫停推播並在背景每 30 秒重新檢查連線，成功後自動恢復摘要推播。中斷期間仍接收快訊並保存符合關鍵字的新聞背景，不會改推原文；新項目會進入有上限、具一小時 freshness window 的分類 backlog，恢復後只補處理仍具時效性的內容。未設定 API key 時也會暫停推播。這項恢復機制與 Jin10 WebSocket 原有的斷線重連分開運作。

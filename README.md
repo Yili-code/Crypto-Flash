@@ -114,6 +114,8 @@ Then start the combined flash monitor and Telegram assistant:
 python src/flash_service.py
 ```
 
+In Actions, `--run-seconds 21000` stops the service after 350 minutes and awaits component cleanup. A 351-minute external watchdog reports failure if shutdown stalls; unexpected component exits also remain failures. Health checks and state persistence still run afterward.
+
 For an always-on installation with private state outside Git, use the included container setup:
 
 ```bash
