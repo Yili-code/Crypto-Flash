@@ -1342,27 +1342,30 @@
       "telegram_delivery_failures": 0
     },
     "2026-11-04": {
-      "duplicates_blocked": 12171,
-      "gemini_failures": 1,
-      "keyword_filter_passed": 27,
+      "duplicates_blocked": 32935,
+      "gemini_failures": 5,
+      "keyword_filter_passed": 102,
       "latency_ms": {
-        "p50": null,
-        "p95": null,
-        "sample_count": 0
+        "p50": 2356,
+        "p95": 2424,
+        "sample_count": 2
       },
-      "latency_samples_ms": [],
+      "latency_samples_ms": [
+        2281,
+        2432
+      ],
       "pushes": {
         "importance": {
-          "CRITICAL": 0,
-          "HIGH": 0,
+          "CRITICAL": 1,
+          "HIGH": 1,
           "LOW": 0,
           "MEDIUM": 0
         },
-        "total": 0
+        "total": 2
       },
       "queue_dropped_total": 0,
-      "queue_high_water_mark": 4,
-      "received_events": 12289,
+      "queue_high_water_mark": 5,
+      "received_events": 33562,
       "telegram_delivery_failures": 0
     }
   },
