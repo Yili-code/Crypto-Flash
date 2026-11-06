@@ -1,46 +1,5 @@
 {
   "days": {
-    "2026-10-03": {
-      "duplicates_blocked": 87859,
-      "gemini_failures": 4,
-      "keyword_filter_passed": 80,
-      "latency_ms": {
-        "p50": 2238,
-        "p95": 10611,
-        "sample_count": 17
-      },
-      "latency_samples_ms": [
-        1926,
-        2238,
-        10946,
-        1892,
-        2231,
-        10527,
-        2268,
-        2089,
-        2396,
-        2338,
-        2182,
-        2339,
-        1890,
-        2316,
-        2064,
-        2171,
-        2367
-      ],
-      "pushes": {
-        "importance": {
-          "CRITICAL": 0,
-          "HIGH": 17,
-          "LOW": 0,
-          "MEDIUM": 0
-        },
-        "total": 17
-      },
-      "queue_high_water_mark": 2,
-      "received_events": 88133,
-      "telegram_delivery_failures": 0
-    },
     "2026-10-04": {
       "duplicates_blocked": 83847,
       "gemini_failures": 0,
@@ -1352,9 +1311,9 @@
       "telegram_delivery_failures": 0
     },
     "2026-11-06": {
-      "duplicates_blocked": 54840,
+      "duplicates_blocked": 62891,
       "gemini_failures": 34,
-      "keyword_filter_passed": 241,
+      "keyword_filter_passed": 306,
       "latency_ms": {
         "p50": 2750,
         "p95": 30747,
@@ -1380,7 +1339,31 @@
       },
       "queue_dropped_total": 0,
       "queue_high_water_mark": 5,
-      "received_events": 56053,
+      "received_events": 64295,
+      "telegram_delivery_failures": 0
+    },
+    "2026-11-07": {
+      "duplicates_blocked": 12706,
+      "gemini_failures": 0,
+      "keyword_filter_passed": 46,
+      "latency_ms": {
+        "p50": null,
+        "p95": null,
+        "sample_count": 0
+      },
+      "latency_samples_ms": [],
+      "pushes": {
+        "importance": {
+          "CRITICAL": 0,
+          "HIGH": 0,
+          "LOW": 0,
+          "MEDIUM": 0
+        },
+        "total": 0
+      },
+      "queue_dropped_total": 0,
+      "queue_high_water_mark": 1,
+      "received_events": 12854,
       "telegram_delivery_failures": 0
     }
   },
