@@ -1337,9 +1337,9 @@
       "telegram_delivery_failures": 0
     },
     "2026-11-08": {
-      "duplicates_blocked": 8170,
-      "gemini_failures": 1,
-      "keyword_filter_passed": 9,
+      "duplicates_blocked": 28964,
+      "gemini_failures": 3,
+      "keyword_filter_passed": 17,
       "latency_ms": {
         "p50": 49878,
         "p95": 49878,
@@ -1359,7 +1359,7 @@
       },
       "queue_dropped_total": 0,
       "queue_high_water_mark": 1,
-      "received_events": 8207,
+      "received_events": 29035,
       "telegram_delivery_failures": 0
     }
   },
