@@ -1,39 +1,5 @@
 {
   "days": {
-    "2026-10-05": {
-      "duplicates_blocked": 78924,
-      "gemini_failures": 1,
-      "keyword_filter_passed": 93,
-      "latency_ms": {
-        "p50": 2390,
-        "p95": 2762,
-        "sample_count": 10
-      },
-      "latency_samples_ms": [
-        2164,
-        2428,
-        2559,
-        2319,
-        2720,
-        2797,
-        2367,
-        2349,
-        2234,
-        2412
-      ],
-      "pushes": {
-        "importance": {
-          "CRITICAL": 0,
-          "HIGH": 10,
-          "LOW": 0,
-          "MEDIUM": 0
-        },
-        "total": 10
-      },
-      "queue_high_water_mark": 10,
-      "received_events": 79632,
-      "telegram_delivery_failures": 0
-    },
     "2026-10-06": {
       "duplicates_blocked": 65825,
       "gemini_failures": 7,
@@ -1337,29 +1303,54 @@
       "telegram_delivery_failures": 0
     },
     "2026-11-08": {
-      "duplicates_blocked": 49783,
+      "duplicates_blocked": 61206,
       "gemini_failures": 3,
-      "keyword_filter_passed": 18,
+      "keyword_filter_passed": 24,
       "latency_ms": {
-        "p50": 49878,
-        "p95": 49878,
-        "sample_count": 1
+        "p50": 26164,
+        "p95": 47507,
+        "sample_count": 2
       },
       "latency_samples_ms": [
-        49878
+        49878,
+        2451
       ],
       "pushes": {
         "importance": {
           "CRITICAL": 0,
-          "HIGH": 1,
+          "HIGH": 2,
           "LOW": 0,
           "MEDIUM": 0
         },
-        "total": 1
+        "total": 2
       },
       "queue_dropped_total": 0,
       "queue_high_water_mark": 1,
-      "received_events": 49917,
+      "received_events": 61393,
+      "telegram_delivery_failures": 0
+    },
+    "2026-11-09": {
+      "duplicates_blocked": 9389,
+      "gemini_failures": 4,
+      "keyword_filter_passed": 12,
+      "latency_ms": {
+        "p50": null,
+        "p95": null,
+        "sample_count": 0
+      },
+      "latency_samples_ms": [],
+      "pushes": {
+        "importance": {
+          "CRITICAL": 0,
+          "HIGH": 0,
+          "LOW": 0,
+          "MEDIUM": 0
+        },
+        "total": 0
+      },
+      "queue_dropped_total": 0,
+      "queue_high_water_mark": 1,
+      "received_events": 9422,
       "telegram_delivery_failures": 0
     }
   },
