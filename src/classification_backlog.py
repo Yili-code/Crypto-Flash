@@ -88,4 +88,4 @@ def remove(identifier: str) -> None:
 
 def pending(limit: int = 25) -> list[dict]:
     records = load()
-    return sorted(records, key=lambda record: (record["queued_at"], record["id"]))[:max(0, limit)]
+    return sorted(records, key=lambda record: (record["queued_at"], record["id"]), reverse=True)[:max(0, limit)]

@@ -9,10 +9,12 @@ import time
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from common import STATE_DIR
 
 TAIPEI = timezone(timedelta(hours=8))
+PACIFIC = ZoneInfo("America/Los_Angeles")
 DEFAULT_LIMITS = {"youtube": 120, "live": 600, "digest": 10}
 
 
@@ -136,7 +138,12 @@ def classify(status: int, data: dict, headers: dict) -> tuple[str, float]:
         delay = 0.0
     authentication_reasons = {"API_KEY_INVALID", "API_KEY_EXPIRED", "API_KEY_SERVICE_BLOCKED"}
     if status == 429:
-        return ("daily_quota" if daily else "rate_limit"), max(delay, 86400 if daily else 0)
+        if daily:
+            now = time.time()
+            pacific_now = datetime.fromtimestamp(now, PACIFIC)
+            reset = (pacific_now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            return "daily_quota", max(delay, reset.timestamp() - now)
+        return "rate_limit", delay
     if status == 401 or reasons & authentication_reasons:
         return "authentication", 0
     if status in (402, 403, 404) or error.get("status") in {"FAILED_PRECONDITION", "PERMISSION_DENIED"}:

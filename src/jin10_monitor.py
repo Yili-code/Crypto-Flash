@@ -389,9 +389,13 @@ async def gemini_recovery_loop(session: aiohttp.ClientSession) -> None:
                 GEMINI_AVAILABLE = False
             if GEMINI_AVAILABLE:
                 log.info("Gemini is available; summarized flash pushes resumed")
-                await retry_classification_backlog(session)
             else:
                 log.warning("Gemini unavailable; pushes paused; local retry eligibility check in %ss", GEMINI_RECONNECT_DELAY)
+        if GEMINI_AVAILABLE:
+            try:
+                await retry_classification_backlog(session)
+            except backlog.BacklogStateError as exc:
+                log.warning("Cannot replay pending flash classifications: %s", exc)
         await asyncio.sleep(GEMINI_RECONNECT_DELAY)
 
 def remember_news(
@@ -473,8 +477,8 @@ async def handle_item(session: aiohttp.ClientSession, item: dict, *, retrying: b
             GEMINI_AVAILABLE = False
             # Gemini failed; skip this item entirely instead of broadcasting raw content
             log.warning("Gemini tiering failed; skipping push: %s", (title or content)[:60])
-            backlog.enqueue(item)
             if not retrying:
+                backlog.enqueue(item)
                 remember_news(title, content, None, news_id=str(item.get("id") or ""), source=source, url=url)
             return
         else:
@@ -513,13 +517,15 @@ async def handle_item(session: aiohttp.ClientSession, item: dict, *, retrying: b
 
 
 async def retry_classification_backlog(session: aiohttp.ClientSession) -> None:
-    """Replay fresh classification work after Gemini recovers, oldest first."""
+    """Replay one bounded batch of fresh classification work, newest first."""
     records = backlog.pending()
     if records:
         log.info("Retrying %d pending flash classifications", len(records))
     for record in records:
         if not GEMINI_AVAILABLE:
             break
+        if time.time() - record["queued_at"] > backlog.MAX_AGE_SECONDS:
+            continue
         await handle_item(session, record["item"], retrying=True)
 
 

@@ -43,7 +43,25 @@ def test_retry_hints_and_daily_quota(clock):
     assert policy.classify(429, data, {'Retry-After': '90'}) == ('rate_limit', 123.5)
     assert policy.classify(503, {}, {'Retry-After': 'Mon, 21 Sep 2026 12:02:00 GMT'}) == ('provider_unavailable', 120)
     data['error']['details'].append({'@type': 'google.rpc.QuotaFailure', 'violations': [{'quotaId': 'RequestsPerDay'}]})
-    assert policy.classify(429, data, {}) == ('daily_quota', 86400)
+    assert policy.classify(429, data, {}) == ('daily_quota', 19 * 3600)
+    assert policy.classify(429, data, {'Retry-After': '72000'}) == ('daily_quota', 72000)
+
+
+@pytest.mark.parametrize('month,reset_hour', [(7, 7), (11, 8)])
+def test_daily_quota_probe_is_eligible_at_pacific_midnight(clock, month, reset_hour):
+    reset = datetime(2026, month, 21, reset_hour, tzinfo=timezone.utc).timestamp()
+    clock[0] = reset - 120
+    data = {'error': {'details': [
+        {'@type': 'google.rpc.QuotaFailure', 'violations': [{'quotaId': 'RequestsPerDay'}]},
+    ]}}
+    session = FakeSession([FakeResponse(429, json_data=data), success()])
+    assert call(session, scope='live') is None
+    assert policy.read_state('live')['retry_at'] == reset
+    clock[0] = reset - 1
+    assert call(session, scope='live') is None
+    assert len(session.calls) == 1
+    clock[0] = reset
+    assert call(session, scope='live') == 'ok'
 
 
 def test_persisted_exponential_backoff_and_success_reset(clock):

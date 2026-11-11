@@ -120,6 +120,37 @@ def test_healthy_connection_does_not_send_extra_probes(monkeypatch, monitor):
     probe.assert_not_awaited()
 
 
+def test_recovery_drains_multiple_batches_without_probing_again(monkeypatch, monitor):
+    probe = AsyncMock(return_value=True)
+    monkeypatch.setattr(jm, "test_gemini_connection", probe)
+    monkeypatch.setattr(jm, "summarize_with_gemini", AsyncMock(return_value={
+        "tier": "HIGH", "relevant": True, "message": "Recovered summary",
+    }))
+    now = jm.time.time()
+    for index in range(26):
+        jm.backlog.enqueue({"id": str(index), "data": {"content": f"BTC event {index}"}}, now=now - 26 + index)
+    jm.backlog.enqueue({"id": "expired", "data": {"content": "BTC old event"}},
+                       now=now - jm.backlog.MAX_AGE_SECONDS - 1)
+    counts = []
+
+    async def pause(delay):
+        counts.append(monitor.await_count)
+        assert delay == jm.GEMINI_RECONNECT_DELAY
+        if len(counts) == 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(jm.asyncio, "sleep", pause)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(jm.gemini_recovery_loop(None))
+
+    assert counts == [25, 26]
+    assert jm.backlog.pending() == []
+    probe.assert_awaited_once()
+    requests = [call.args[1] for call in jm.summarize_with_gemini.await_args_list]
+    assert requests[0].endswith("BTC event 25")
+    assert requests[-1].endswith("BTC event 0")
+
+
 def test_non_object_summary_is_treated_as_failure(monkeypatch):
     monkeypatch.setattr(jm, "call_gemini", AsyncMock(return_value="[]"))
     assert asyncio.run(jm.summarize_with_gemini(None, "BTC")) is None
