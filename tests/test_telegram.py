@@ -34,6 +34,15 @@ def test_send_attaches_a_reply_target_when_asked():
     assert session.calls[0]["json"]["reply_to_message_id"] == 7
 
 
+def test_send_preserves_inline_keyboard_during_html_fallback(no_sleep):
+    markup = {"inline_keyboard": [[{"text": "Calendar", "url": "https://calendar.google.com/"}]]}
+    session = FakeSession([FakeResponse(400), FakeResponse(200)])
+    assert asyncio.run(tg.send_telegram_message(
+        session, "-1", "<b>Calendar</b>", "token", reply_markup=markup,
+    ))
+    assert [call["json"]["reply_markup"] for call in session.calls] == [markup, markup]
+
+
 def test_send_skips_entirely_when_unconfigured():
     session = FakeSession()
     assert asyncio.run(tg.send_telegram_message(session, "", "hi", "")) is False

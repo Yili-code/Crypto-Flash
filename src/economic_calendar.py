@@ -3,17 +3,19 @@
 import argparse
 import asyncio
 import json
+import os
 import re
 import calendar
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from html import escape, unescape
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 import aiohttp
 
 from common import STATE_DIR, get_logger
-from tg import TELEGRAM_CHAT_ID, send_telegram_message
+from tg import TELEGRAM_BOT_TOKEN_01, TELEGRAM_CHAT_ID, send_telegram_message
 
 TAIPEI = timezone(timedelta(hours=8))
 SOURCE_TIMEZONE = ZoneInfo("America/New_York")
@@ -298,9 +300,56 @@ async def main(*, dry_run: bool = False, force: bool = False) -> None:
     log.info("Calendar notification delivered for %s", day)
 
 
+def google_calendar_url(when: datetime, title: str) -> str:
+    start = when.astimezone(timezone.utc)
+    end = start + timedelta(minutes=15)
+    query = urlencode({
+        "action": "TEMPLATE",
+        "text": title,
+        "dates": f"{start:%Y%m%dT%H%M%SZ}/{end:%Y%m%dT%H%M%SZ}",
+        "stz": "Asia/Taipei",
+        "etz": "Asia/Taipei",
+    })
+    return f"https://calendar.google.com/calendar/r/eventedit?{query}"
+
+
+async def send_calendar_button_preview() -> None:
+    chat_id = os.getenv("TELEGRAM_TEST_CHAT_ID", "").strip()
+    if (
+        not re.fullmatch(r"-[0-9]+|@[A-Za-z0-9_]+", chat_id)
+        or chat_id.casefold() == TELEGRAM_CHAT_ID.strip().casefold()
+    ):
+        raise RuntimeError("Set TELEGRAM_TEST_CHAT_ID to a separate test group")
+    token = os.getenv("TELEGRAM_TEST_BOT_TOKEN", "").strip() or TELEGRAM_BOT_TOKEN_01
+    if not token:
+        raise RuntimeError("Configure a Telegram bot token for the test preview")
+
+    now = datetime.now(TAIPEI)
+    when = datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), TAIPEI)
+    when = when.replace(hour=21, minute=30)
+    title = "CPI (test event)"
+    message = render_messages([(when, title)], now.date())[0]
+    markup = {"inline_keyboard": [[{
+        "text": "新增到 Google Calendar",
+        "url": google_calendar_url(when, title),
+    }]]}
+    async with aiohttp.ClientSession() as session:
+        if not await send_telegram_message(
+            session, chat_id, "<b>Test preview</b>\n" + message,
+            bot_token=token, reply_markup=markup,
+        ):
+            raise RuntimeError("Calendar button preview delivery failed")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="Fetch and print without sending or saving state")
     parser.add_argument("--force", action="store_true", help="Explicitly resend today's reminder")
+    parser.add_argument("--preview-calendar-button", action="store_true", help="Send a sample to TELEGRAM_TEST_CHAT_ID")
     args = parser.parse_args()
-    asyncio.run(main(dry_run=args.dry_run, force=args.force))
+    if args.preview_calendar_button:
+        if args.dry_run or args.force:
+            parser.error("--preview-calendar-button cannot be combined with --dry-run or --force")
+        asyncio.run(send_calendar_button_preview())
+    else:
+        asyncio.run(main(dry_run=args.dry_run, force=args.force))

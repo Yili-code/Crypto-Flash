@@ -2,11 +2,56 @@ import asyncio
 import json
 from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock
+from urllib.parse import parse_qs, urlsplit
 
 import aiohttp
 import pytest
 
 import economic_calendar as ec
+
+
+def test_google_calendar_url_preserves_time_and_title():
+    url = urlsplit(ec.google_calendar_url(
+        datetime.fromisoformat("2026-11-10T21:30:00+08:00"), "CPI & core",
+    ))
+    assert url.netloc == "calendar.google.com"
+    assert parse_qs(url.query) == {
+        "action": ["TEMPLATE"], "text": ["CPI & core"],
+        "dates": ["20261110T133000Z/20261110T134500Z"],
+        "stz": ["Asia/Taipei"], "etz": ["Asia/Taipei"],
+    }
+
+
+@pytest.mark.parametrize("test_chat", ["", "-100123", "123:invalid-test-value"])
+def test_calendar_button_preview_requires_separate_chat(monkeypatch, test_chat):
+    monkeypatch.setenv("TELEGRAM_TEST_CHAT_ID", test_chat)
+    monkeypatch.setattr(ec, "TELEGRAM_CHAT_ID", "-100123")
+    sender = AsyncMock()
+    monkeypatch.setattr(ec, "send_telegram_message", sender)
+
+    with pytest.raises(RuntimeError, match="separate test group"):
+        asyncio.run(ec.send_calendar_button_preview())
+    sender.assert_not_awaited()
+
+
+def test_calendar_button_preview_sends_sample_without_production_state(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_TEST_CHAT_ID", "-100456")
+    monkeypatch.setenv("TELEGRAM_TEST_BOT_TOKEN", "test-token")
+    monkeypatch.setattr(ec, "TELEGRAM_CHAT_ID", "-100123")
+    monkeypatch.setattr(ec, "STATE_FILE", None)
+    sender = AsyncMock(return_value=True)
+    monkeypatch.setattr(ec, "send_telegram_message", sender)
+
+    asyncio.run(ec.send_calendar_button_preview())
+
+    sender.assert_awaited_once()
+    _, chat_id, message = sender.await_args.args
+    assert chat_id == "-100456"
+    assert "Test preview" in message and "21:30  CPI (test event)" in message
+    assert sender.await_args.kwargs["bot_token"] == "test-token"
+    button = sender.await_args.kwargs["reply_markup"]["inline_keyboard"][0][0]
+    assert button["text"] == "新增到 Google Calendar"
+    assert parse_qs(urlsplit(button["url"]).query)["text"] == ["CPI (test event)"]
 
 
 def entry(when="2026-09-16T08:30:00-04:00", title="CPI m/m", country="USD", impact="High"):
