@@ -64,6 +64,7 @@ async def send_telegram_message(
     bot_token: Optional[str] = None,
     *,
     reply_to: Optional[int] = None,
+    reply_markup: Optional[dict] = None,
     max_attempts: int = 3,
 ) -> bool:
     token = TELEGRAM_BOT_TOKEN_01 if bot_token is None else bot_token
@@ -81,6 +82,8 @@ async def send_telegram_message(
     }
     if reply_to:
         base_payload["reply_to_message_id"] = reply_to
+    if reply_markup is not None:
+        base_payload["reply_markup"] = reply_markup
 
     use_html = True
     for attempt in range(1, max_attempts + 1):

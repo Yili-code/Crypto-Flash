@@ -2,11 +2,56 @@ import asyncio
 import json
 from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock
+from urllib.parse import parse_qs, urlsplit
 
 import aiohttp
 import pytest
 
 import economic_calendar as ec
+
+
+def test_google_calendar_url_preserves_time_and_title():
+    url = urlsplit(ec.google_calendar_url(
+        datetime.fromisoformat("2026-11-10T21:30:00+08:00"), "CPI & core",
+    ))
+    assert url.netloc == "calendar.google.com"
+    assert parse_qs(url.query) == {
+        "action": ["TEMPLATE"], "text": ["CPI & core"],
+        "dates": ["20261110T133000Z/20261110T134500Z"],
+        "stz": ["Asia/Taipei"], "etz": ["Asia/Taipei"],
+    }
+
+
+@pytest.mark.parametrize("test_chat", ["", "-100123", "123:invalid-test-value"])
+def test_calendar_button_preview_requires_separate_chat(monkeypatch, test_chat):
+    monkeypatch.setenv("TELEGRAM_TEST_CHAT_ID", test_chat)
+    monkeypatch.setattr(ec, "TELEGRAM_CHAT_ID", "-100123")
+    sender = AsyncMock()
+    monkeypatch.setattr(ec, "send_telegram_message", sender)
+
+    with pytest.raises(RuntimeError, match="separate test group"):
+        asyncio.run(ec.send_calendar_button_preview())
+    sender.assert_not_awaited()
+
+
+def test_calendar_button_preview_sends_sample_without_production_state(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_TEST_CHAT_ID", "-100456")
+    monkeypatch.setenv("TELEGRAM_TEST_BOT_TOKEN", "test-token")
+    monkeypatch.setattr(ec, "TELEGRAM_CHAT_ID", "-100123")
+    monkeypatch.setattr(ec, "STATE_FILE", None)
+    sender = AsyncMock(return_value=True)
+    monkeypatch.setattr(ec, "send_telegram_message", sender)
+
+    asyncio.run(ec.send_calendar_button_preview())
+
+    sender.assert_awaited_once()
+    _, chat_id, message = sender.await_args.args
+    assert chat_id == "-100456"
+    assert "Test preview" in message and "21:30  CPI (test event)" in message
+    assert sender.await_args.kwargs["bot_token"] == "test-token"
+    button = sender.await_args.kwargs["reply_markup"]["inline_keyboard"][0][0]
+    assert button["text"] == "新增到 Google Calendar"
+    assert parse_qs(urlsplit(button["url"]).query)["text"] == ["CPI (test event)"]
 
 
 def entry(when="2026-09-16T08:30:00-04:00", title="CPI m/m", country="USD", impact="High"):
@@ -19,10 +64,17 @@ def test_taiwan_day_filter_sort_deduplicate_and_utc_rollover():
             entry(country="GBP"), entry(title="Retail Sales m/m")]
     events = ec.select_events(rows, date(2026, 9, 16))
     assert [title for _, title in events] == ["FOMC 利率決議", "CPI", "非農就業"]
-    text = ec.render_messages(events, date(2026, 9, 16))[0]
+    message = ec.render_messages(events, date(2026, 9, 16))[0]
+    text = message.text
     assert "09/16 02:00  FOMC Rate Decision" in text
     assert "09/16 20:30  CPI" in text
     assert "09/17 02:00  Nonfarm Payrolls" in text
+    buttons = [row[0] for row in message.reply_markup["inline_keyboard"]]
+    assert [button["text"] for button in buttons] == [
+        "+ Calendar · 09/16 02:00 FOMC Rate Decision",
+        "+ Calendar · 09/16 20:30 CPI",
+        "+ Calendar · 09/17 02:00 Nonfarm Payrolls",
+    ]
 
 
 def test_winter_offset_and_midnight_boundaries():
@@ -34,8 +86,10 @@ def test_winter_offset_and_midnight_boundaries():
 
 
 def test_no_events_explains_dates_scope_and_meaning():
-    text = ec.render_messages(ec.select_events([entry(title="Retail Sales m/m")], date(2026, 9, 16)),
-                              date(2026, 9, 16))[0]
+    message = ec.render_messages(ec.select_events([entry(title="Retail Sales m/m")], date(2026, 9, 16)),
+                                 date(2026, 9, 16))[0]
+    text = message.text
+    assert message.reply_markup is None
     assert "2026/09/16–09/17" in text
     assert "No CPI, nonfarm payrolls, or FOMC events scheduled for these two days." in text
     assert "https://www.forexfactory.com/calendar" in text
@@ -70,8 +124,13 @@ def test_escape_and_split_without_losing_events():
               for i in range(50)]
     messages = ec.render_messages(events, date(2026, 9, 16))
     assert len(messages) > 1
-    assert all(len(message.encode("utf-16-le")) // 2 <= 4000 for message in messages)
-    assert sum(message.count("&lt;&amp;&gt;") for message in messages) == 50
+    assert all(len(message.text.encode("utf-16-le")) // 2 <= 4000 for message in messages)
+    assert sum(message.text.count("&lt;&amp;&gt;") for message in messages) == 50
+    for message in messages:
+        titles = [parse_qs(urlsplit(row[0]["url"]).query)["text"][0]
+                  for row in message.reply_markup["inline_keyboard"]]
+        assert len(titles) == message.text.count("&lt;&amp;&gt;")
+        assert all(title.replace("<&>", "&lt;&amp;&gt;") in message.text for title in titles)
 
 
 @pytest.fixture
@@ -107,6 +166,17 @@ def test_explicit_force_resends_today_without_changing_default_dedup(delivery):
     asyncio.run(ec.main(force=True))
     asyncio.run(ec.main())
     assert delivery.await_count == 2
+
+
+def test_scheduled_delivery_sends_calendar_button(delivery, monkeypatch):
+    when = datetime.fromisoformat("2026-11-10T21:30:00+08:00")
+    monkeypatch.setattr(ec, "select_events", lambda payload, day: [(when, "CPI")])
+
+    asyncio.run(ec.main())
+
+    button = delivery.await_args.kwargs["reply_markup"]["inline_keyboard"][0][0]
+    assert button["text"] == "新增到 Google Calendar"
+    assert parse_qs(urlsplit(button["url"]).query)["dates"] == ["20261110T133000Z/20261110T134500Z"]
 
 
 def test_fetch_failure_notifies_only_after_all_retries_and_does_not_save(delivery, monkeypatch):

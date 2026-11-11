@@ -71,6 +71,10 @@
 
 經濟日曆使用 Forex Factory 的公開每週 JSON，不呼叫 Gemini。以台灣今天 00:00 至後天 00:00（不含）篩選，共兩個日曆日，包含今日 08:00 前已發生事件。依事件名稱篩選，不依來源影響分級；排除 FOMC 會議紀錄、官員談話及其他數據。同時發布的 CPI 項目及 FOMC 利率／聲明合併顯示。可用 `python src/economic_calendar.py --dry-run` 讀取真實來源並預覽，不發送訊息。
 
+正式經濟提醒的每項事件都有 Google Calendar 按鈕，會預填公布時間和 15 分鐘區塊，由使用者選擇行事曆並儲存。
+
+在獨立 Telegram 測試群組預覽 Google Calendar 按鈕時，設定 `TELEGRAM_TEST_CHAT_ID`，再執行 `python src/economic_calendar.py --preview-calendar-button`。若使用獨立測試 bot，設定 `TELEGRAM_TEST_BOT_TOKEN`。預覽會傳送標記為測試的 CPI 範例，預填 15 分鐘行事曆區塊，並保留正式排程的送達狀態。
+
 排程檔為 `.github/workflows/economic_calendar.yml`，使用既有 Telegram secrets，合併／推送至 GitHub 預設分支才會啟用。GitHub Actions 可能延遲執行，無法保證準點送達。若抓取失敗、來源過期或跨週資料不足（兩天範圍跨越來源週界時），會在 30 秒與 120 秒後重試；只有全部失敗後才發送精簡英文通知，且不標記當日已送達。空結果只代表來源中沒有符合 CPI、非農、FOMC 篩選的資料；不代表幣市沒有重大事件。目前未接入幣圈原生事件，未與官方日程交叉驗證，事件前一小時分析由常駐服務負責，詳見下節。週界檢查不能證明來源事件完整。成功後獨立保存當日送達狀態；發送成功但狀態回存失敗時，重跑仍可能重複通知。
 
 ---
