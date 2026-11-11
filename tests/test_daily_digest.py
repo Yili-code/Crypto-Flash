@@ -167,6 +167,59 @@ def test_repeated_invalid_model_output_still_fails_closed(daily_items, model):
     assert model.await_count == 2
 
 
+def test_overlength_repair_requests_fewer_topics(daily_items, model):
+    valid = model.return_value
+    invalid = json.dumps({"overview": "x" * 40, "points": [
+        {"title": str(i), "detail": "b" * 75, "source_ids": [1]} for i in range(3)], "watch": ""})
+    model.side_effect = [invalid, valid]
+
+    asyncio.run(dd.build_digest(None, daily_items[0]))
+
+    instruction = model.await_args.kwargs["system_instruction"]
+    assert "visible digest exceeds 250 characters" in instruction
+    assert "最多保留兩個" in instruction
+
+
+@pytest.mark.parametrize("overview_length", [40, 41])
+def test_body_limit_counts_visible_formatting(overview_length):
+    raw = json.dumps({"overview": "&" * overview_length, "points": [
+        {"title": "a", "detail": "b" * 85, "source_ids": [1]},
+        {"title": "c", "detail": "d" * 85, "source_ids": [1]},
+    ], "watch": "e" * 23})
+    if overview_length == 41:
+        with pytest.raises(dd.DigestUnavailable, match="visible digest exceeds"):
+            dd.render_summary(raw, {1})
+    else:
+        assert "&amp;" * overview_length in dd.render_summary(raw, {1})
+
+
+@pytest.mark.parametrize(("scope", "category", "delay", "should_retry"), [
+    ("digest", "provider_unavailable", 36, True),
+    ("digest", "provider_unavailable", 121, False),
+    ("digest", "daily_quota", 36, False),
+    ("live", "provider_unavailable", 36, False),
+])
+def test_provider_retry_respects_scope_and_cooldown(
+    daily_items, model, monkeypatch, scope, category, delay, should_retry,
+):
+    model.side_effect = [None, model.return_value]
+    monkeypatch.setattr(dd.gemini_policy, "read_state", lambda scope: {
+        "retry_at": 1000 + delay, "last_error": category, "blocked": False,
+    })
+    monkeypatch.setattr(dd.time, "time", lambda: 1000)
+    sleep = AsyncMock()
+    monkeypatch.setattr(dd.asyncio, "sleep", sleep)
+    if should_retry:
+        asyncio.run(dd.build_digest(None, daily_items[0], usage_scope=scope))
+        sleep.assert_awaited_once_with(delay)
+        assert model.await_count == 2
+    else:
+        with pytest.raises(dd.DigestUnavailable):
+            asyncio.run(dd.build_digest(None, daily_items[0], usage_scope=scope))
+        sleep.assert_not_awaited()
+        assert model.await_count == 1
+
+
 def test_render_escapes_html_and_preserves_complete_text():
     raw = json.dumps({"overview": "<Fed>&", "points": [
         {"title": "<標題>", "detail": "完整句子 & 😀", "source_ids": [1]}], "watch": ""})

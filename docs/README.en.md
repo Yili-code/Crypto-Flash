@@ -212,6 +212,8 @@ Actions read the files available at checkout; updates in a running monitor are o
 
 Successful delivery records the date in `data/daily_digest_state.json`; rerunning the same day skips delivery, and failed sends do not advance state. Corrupt state stops the job. A crash or persistence failure after sending can still cause a duplicate on retry, so inspect delivery logs before rerunning a failed job.
 
+The digest body targets 150–220 characters and has a 250-character limit. If the body exceeds the limit, the repair prompt asks for at most two topics. Scheduled digests can retry one transient Gemini failure after a cooldown of up to 120 seconds. Retries count toward the daily request budget.
+
 Scheduled execution requires merging the workflow into the default branch, and GitHub schedules may be delayed. Manual workflow dispatch is also available. Running `python src/daily_digest.py` locally **sends** yesterday's report.
 
 ### Choosing a query
