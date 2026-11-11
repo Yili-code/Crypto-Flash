@@ -14,3 +14,7 @@ Updated: 2026-11-11T22:54:28+08:00.
 Updated: 2026-11-11T22:55:17+08:00.
 - Rebased onto b2eb762. The user confirmed the locally configured destination for a single labeled test. Telegram accepted the CPI sample with the inline keyboard using the existing configured bot. The destination guard was overridden only in that process, and the scheduled reminder was not run.
 - Mobile opening and saving remain unverified. The feature is on the dedicated branch for remote handoff, without a main merge or deployment.
+
+Updated: 2026-11-11T22:58:13+08:00.
+- User reported manual testing complete and authorized cloud deployment. Scheduled reminders now use the same renderer as the preview, with a 15-minute link per event. Split messages retain their corresponding buttons, and empty notices omit the keyboard.
+- Ruff and diff checks passed. Windows suite: 387 passed; six failures in event briefing and YouTube paths, including state-file replacement access errors. Ubuntu CI will verify the complete suite before production merge.

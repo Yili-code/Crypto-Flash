@@ -6,6 +6,7 @@ import json
 import os
 import re
 import calendar
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from html import escape, unescape
@@ -137,16 +138,22 @@ def projection_dates(html: str, year: int) -> set[date]:
     return dates
 
 
-def render_messages(events: list[tuple[datetime, str]], day: date) -> list[str]:
+@dataclass
+class CalendarMessage:
+    text: str
+    reply_markup: dict | None = None
+
+
+def render_messages(events: list[tuple[datetime, str]], day: date) -> list[CalendarMessage]:
     last_day = day + timedelta(days=WINDOW_DAYS - 1)
     end_label = last_day.strftime("%m/%d" if day.year == last_day.year else "%Y/%m/%d")
     header = '<b><a href="https://www.forexfactory.com/calendar">Event Reminder</a></b>\n'
     header += f"{day:%Y/%m/%d}–{end_label} · Taiwan Time (UTC+8)\n"
-    footer = ''
     if not events:
-        return [header + "\nNo CPI, nonfarm payrolls, or FOMC events scheduled for these two days."]
+        return [CalendarMessage(header + "\nNo CPI, nonfarm payrolls, or FOMC events scheduled for these two days.")]
     messages = []
     body = header
+    buttons = []
     labels = {
         "非農就業": "Nonfarm Payrolls",
         "FOMC 利率決議": "FOMC Rate Decision",
@@ -156,13 +163,18 @@ def render_messages(events: list[tuple[datetime, str]], day: date) -> list[str]:
     for when, title in events:
         title = labels.get(title, title)
         row = f"\n{when.astimezone(TAIPEI):%m/%d %H:%M}  {escape(title)}"
-        if len((header + row + footer).encode("utf-16-le")) // 2 > 4000:
+        if len((header + row).encode("utf-16-le")) // 2 > 4000:
             raise ValueError("Calendar title exceeds message limit")
-        if len((body + row + footer).encode("utf-16-le")) // 2 > 4000:
-            messages.append(body + footer)
+        if len((body + row).encode("utf-16-le")) // 2 > 4000:
+            messages.append(CalendarMessage(body, {"inline_keyboard": buttons}))
             body = header
+            buttons = []
         body += row
-    return messages + [body + footer]
+        label = "新增到 Google Calendar"
+        if len(events) > 1:
+            label = f"+ Calendar · {when.astimezone(TAIPEI):%m/%d %H:%M} {title}"
+        buttons.append([{"text": label, "url": google_calendar_url(when, title)}])
+    return messages + [CalendarMessage(body, {"inline_keyboard": buttons})]
 
 
 async def fetch_calendar(session: aiohttp.ClientSession) -> object:
@@ -210,7 +222,7 @@ async def fetch_calendar(session: aiohttp.ClientSession) -> object:
     return {"day": day.isoformat(), "range_events": payload}
 
 
-async def load_messages(session: aiohttp.ClientSession, day: date) -> list[str]:
+async def load_messages(session: aiohttp.ClientSession, day: date) -> list[CalendarMessage]:
     """Retry transport failures, but do not re-fetch deterministically invalid data."""
     for attempt in range(len(CALENDAR_RETRY_DELAYS) + 1):
         try:
@@ -288,10 +300,12 @@ async def main(*, dry_run: bool = False, force: bool = False) -> None:
                 await send_telegram_message(session, TELEGRAM_CHAT_ID, notice)
             raise
         if dry_run:
-            print("\n\n".join(messages))
+            print("\n\n".join(message.text for message in messages))
             return
         for message in messages:
-            if not await send_telegram_message(session, TELEGRAM_CHAT_ID, message):
+            if not await send_telegram_message(
+                session, TELEGRAM_CHAT_ID, message.text, reply_markup=message.reply_markup,
+            ):
                 raise RuntimeError("Calendar delivery failed; delivery state was not advanced")
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     temporary = STATE_FILE.with_suffix(".json.tmp")
@@ -329,14 +343,10 @@ async def send_calendar_button_preview() -> None:
     when = when.replace(hour=21, minute=30)
     title = "CPI (test event)"
     message = render_messages([(when, title)], now.date())[0]
-    markup = {"inline_keyboard": [[{
-        "text": "新增到 Google Calendar",
-        "url": google_calendar_url(when, title),
-    }]]}
     async with aiohttp.ClientSession() as session:
         if not await send_telegram_message(
-            session, chat_id, "<b>Test preview</b>\n" + message,
-            bot_token=token, reply_markup=markup,
+            session, chat_id, "<b>Test preview</b>\n" + message.text,
+            bot_token=token, reply_markup=message.reply_markup,
         ):
             raise RuntimeError("Calendar button preview delivery failed")
 
