@@ -1,45 +1,5 @@
 {
   "days": {
-    "2026-10-09": {
-      "duplicates_blocked": 65554,
-      "gemini_failures": 4,
-      "keyword_filter_passed": 232,
-      "latency_ms": {
-        "p50": 2318,
-        "p95": 3079,
-        "sample_count": 16
-      },
-      "latency_samples_ms": [
-        2753,
-        4058,
-        1932,
-        2577,
-        2041,
-        2306,
-        2483,
-        2281,
-        2159,
-        1990,
-        2263,
-        2201,
-        2566,
-        2712,
-        2455,
-        2331
-      ],
-      "pushes": {
-        "importance": {
-          "CRITICAL": 0,
-          "HIGH": 16,
-          "LOW": 0,
-          "MEDIUM": 0
-        },
-        "total": 16
-      },
-      "queue_high_water_mark": 5,
-      "received_events": 66918,
-      "telegram_delivery_failures": 0
-    },
     "2026-10-10": {
       "duplicates_blocked": 88079,
       "gemini_failures": 1,
@@ -1333,13 +1293,13 @@
       "telegram_delivery_failures": 0
     },
     "2026-11-12": {
-      "duplicates_blocked": 37490,
-      "gemini_failures": 11,
-      "keyword_filter_passed": 97,
+      "duplicates_blocked": 42286,
+      "gemini_failures": 32,
+      "keyword_filter_passed": 140,
       "latency_ms": {
-        "p50": 2662,
-        "p95": 14053,
-        "sample_count": 7
+        "p50": 3512,
+        "p95": 582933,
+        "sample_count": 9
       },
       "latency_samples_ms": [
         17635,
@@ -1348,20 +1308,50 @@
         5694,
         2097,
         2662,
-        3512
+        3512,
+        272672,
+        789773
       ],
       "pushes": {
         "importance": {
           "CRITICAL": 0,
-          "HIGH": 7,
+          "HIGH": 9,
           "LOW": 0,
           "MEDIUM": 0
         },
-        "total": 7
+        "total": 9
       },
       "queue_dropped_total": 0,
-      "queue_high_water_mark": 3,
-      "received_events": 38073,
+      "queue_high_water_mark": 13,
+      "received_events": 42991,
+      "telegram_delivery_failures": 0
+    },
+    "2026-11-13": {
+      "duplicates_blocked": 15759,
+      "gemini_failures": 65,
+      "keyword_filter_passed": 87,
+      "latency_ms": {
+        "p50": 222474,
+        "p95": 2618283,
+        "sample_count": 3
+      },
+      "latency_samples_ms": [
+        2884484,
+        14020,
+        222474
+      ],
+      "pushes": {
+        "importance": {
+          "CRITICAL": 0,
+          "HIGH": 3,
+          "LOW": 0,
+          "MEDIUM": 0
+        },
+        "total": 3
+      },
+      "queue_dropped_total": 0,
+      "queue_high_water_mark": 2,
+      "received_events": 15994,
       "telegram_delivery_failures": 0
     }
   },
