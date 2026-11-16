@@ -1,44 +1,5 @@
 {
   "days": {
-    "2026-10-13": {
-      "duplicates_blocked": 45328,
-      "gemini_failures": 0,
-      "keyword_filter_passed": 176,
-      "latency_ms": {
-        "p50": 2292,
-        "p95": 2555,
-        "sample_count": 14
-      },
-      "latency_samples_ms": [
-        2544,
-        2264,
-        2243,
-        2356,
-        1797,
-        2299,
-        2355,
-        2242,
-        2284,
-        2366,
-        2575,
-        2239,
-        2226,
-        2385
-      ],
-      "pushes": {
-        "importance": {
-          "CRITICAL": 0,
-          "HIGH": 14,
-          "LOW": 0,
-          "MEDIUM": 0
-        },
-        "total": 14
-      },
-      "queue_dropped_total": 0,
-      "queue_high_water_mark": 9,
-      "received_events": 46203,
-      "telegram_delivery_failures": 0
-    },
     "2026-10-14": {
       "duplicates_blocked": 74613,
       "gemini_failures": 11,
@@ -1332,9 +1293,9 @@
       "telegram_delivery_failures": 0
     },
     "2026-11-16": {
-      "duplicates_blocked": 53872,
-      "gemini_failures": 4,
-      "keyword_filter_passed": 115,
+      "duplicates_blocked": 58077,
+      "gemini_failures": 10,
+      "keyword_filter_passed": 127,
       "latency_ms": {
         "p50": 2225,
         "p95": 2225,
@@ -1353,8 +1314,34 @@
         "total": 1
       },
       "queue_dropped_total": 0,
+      "queue_high_water_mark": 5,
+      "received_events": 59113,
+      "telegram_delivery_failures": 0
+    },
+    "2026-11-17": {
+      "duplicates_blocked": 16493,
+      "gemini_failures": 14,
+      "keyword_filter_passed": 91,
+      "latency_ms": {
+        "p50": 2317,
+        "p95": 2317,
+        "sample_count": 1
+      },
+      "latency_samples_ms": [
+        2317
+      ],
+      "pushes": {
+        "importance": {
+          "CRITICAL": 0,
+          "HIGH": 1,
+          "LOW": 0,
+          "MEDIUM": 0
+        },
+        "total": 1
+      },
+      "queue_dropped_total": 0,
       "queue_high_water_mark": 1,
-      "received_events": 54844,
+      "received_events": 16689,
       "telegram_delivery_failures": 0
     }
   },
