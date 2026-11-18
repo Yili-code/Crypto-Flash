@@ -1,76 +1,5 @@
 {
   "days": {
-    "2026-10-15": {
-      "duplicates_blocked": 87613,
-      "gemini_failures": 2,
-      "keyword_filter_passed": 348,
-      "latency_ms": {
-        "p50": 2704,
-        "p95": 6158,
-        "sample_count": 46
-      },
-      "latency_samples_ms": [
-        2763,
-        2400,
-        2193,
-        2645,
-        1981,
-        3695,
-        2132,
-        2097,
-        1872,
-        1834,
-        3926,
-        4739,
-        4708,
-        6293,
-        2002,
-        2281,
-        3560,
-        4906,
-        5293,
-        5257,
-        2912,
-        2252,
-        2220,
-        2103,
-        2004,
-        5615,
-        2355,
-        2429,
-        2242,
-        5621,
-        1951,
-        3976,
-        2315,
-        5282,
-        5561,
-        2039,
-        5323,
-        2367,
-        3299,
-        3443,
-        3013,
-        2224,
-        2397,
-        5753,
-        19533,
-        6844
-      ],
-      "pushes": {
-        "importance": {
-          "CRITICAL": 0,
-          "HIGH": 46,
-          "LOW": 0,
-          "MEDIUM": 0
-        },
-        "total": 46
-      },
-      "queue_dropped_total": 0,
-      "queue_high_water_mark": 3,
-      "received_events": 89490,
-      "telegram_delivery_failures": 0
-    },
     "2026-10-16": {
       "duplicates_blocked": 85743,
       "gemini_failures": 44,
@@ -1215,32 +1144,74 @@
       "telegram_delivery_failures": 0
     },
     "2026-11-18": {
-      "duplicates_blocked": 39294,
-      "gemini_failures": 5,
-      "keyword_filter_passed": 118,
+      "duplicates_blocked": 42287,
+      "gemini_failures": 9,
+      "keyword_filter_passed": 139,
       "latency_ms": {
-        "p50": 2208,
-        "p95": 2546,
-        "sample_count": 4
+        "p50": 2424,
+        "p95": 229082,
+        "sample_count": 6
       },
       "latency_samples_ms": [
         2599,
         2059,
         2167,
-        2248
+        2248,
+        301859,
+        10749
       ],
       "pushes": {
         "importance": {
           "CRITICAL": 0,
-          "HIGH": 4,
+          "HIGH": 6,
           "LOW": 0,
           "MEDIUM": 0
         },
-        "total": 4
+        "total": 6
+      },
+      "queue_dropped_total": 0,
+      "queue_high_water_mark": 10,
+      "received_events": 43137,
+      "telegram_delivery_failures": 0
+    },
+    "2026-11-19": {
+      "duplicates_blocked": 17319,
+      "gemini_failures": 17,
+      "keyword_filter_passed": 71,
+      "latency_ms": {
+        "p50": 51421,
+        "p95": 550371,
+        "sample_count": 15
+      },
+      "latency_samples_ms": [
+        3057,
+        8289,
+        5215,
+        19526,
+        63784,
+        6095,
+        76394,
+        196932,
+        51421,
+        80313,
+        540383,
+        547469,
+        557141,
+        10306,
+        8884
+      ],
+      "pushes": {
+        "importance": {
+          "CRITICAL": 0,
+          "HIGH": 15,
+          "LOW": 0,
+          "MEDIUM": 0
+        },
+        "total": 15
       },
       "queue_dropped_total": 0,
       "queue_high_water_mark": 4,
-      "received_events": 40045,
+      "received_events": 17535,
       "telegram_delivery_failures": 0
     }
   },
